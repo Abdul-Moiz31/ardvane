@@ -40,6 +40,7 @@ collaborators. This kit is everything that finally worked, packaged so you don't
 
 | | |
 |---|---|
+| 🖥️ **Dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
 | 🔍 **One-command machine scan** | Read-only check of your whole computer: implants, running malware, startup items, attacker connections, editor settings, every git project and known malicious packages |
 | 🧱 **Safe clone** | `git clone` downloads without writing project files, scans, and **blocks** infected repositories |
 | 🚫 **Push guard** | `git push` is blocked if your repository contains malware, so you can't spread it to others |
@@ -114,6 +115,16 @@ Open a new terminal and run `checkrepo --version`. Undo everything any time with
 (or `uninstall.ps1`). The installer backs up every file it edits, never replaces an existing git hooks setup without
 asking, and is safe to run again.
 
+### Prefer a window to the terminal?
+
+```bash
+python3 app/dashboard.py
+```
+
+The dashboard opens in your browser and runs **only on your computer**. It can scan, turn protection on, schedule the
+daily check at the time you choose, and add an app icon so you never need the terminal again.
+→ [Dashboard guide](docs/dashboard.md)
+
 ## ⚙️ How it works
 
 | You do | The kit does |
@@ -156,12 +167,13 @@ backdoor has run — see the [recovery guide](docs/after-a-scan/if-danger-found.
 ```
 polinrider-survival-kit/
 ├── scan-my-machine.sh / .ps1   one-command, read-only machine scan
+├── app/                        the local dashboard (Python standard library + plain JavaScript)
 ├── docs/                       every guide
 │   ├── story/                  how I was attacked three times, and what finally worked
 │   ├── attacks/                each attack explained, with sources
 │   ├── after-a-scan/           incident response, GitHub cleanup, secrets, hardening
-│   └── checkrepo.md · daily-routine.md · infected-packages.md
-├── scanner/                    detection code: checkrepo, package checker, package lists, git hooks, safe clone, tests
+│   └── dashboard.md · checkrepo.md · daily-routine.md · infected-packages.md
+├── scanner/                    detection code: checkrepo, GitHub check, package checker and lists, git hooks, safe clone, tests
 ├── mac/                        install / uninstall / daily check for macOS and Linux
 └── windows/                    the same for Windows (beta)
 ```

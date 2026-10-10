@@ -126,6 +126,26 @@ csrutil status 2>/dev/null | grep -q enabled || chk "System Integrity Protection
 spctl --status 2>/dev/null | grep -q enabled || chk "Gatekeeper is not enabled"
 [ $danger -eq $n ] && [ $warn -eq $nw ] && out "  ✅ intact"
 
+# ---------------------------------------------------------------- 7. GitHub account (opt-in, set in the dashboard's Settings)
+gh_user=""
+[ -n "$PY" ] && [ -f "$DEST/settings.json" ] && gh_user="$("$PY" -c 'import json,sys
+try:
+    s = json.load(open(sys.argv[1], encoding="utf-8")); print(s.get("github_user", "") if s.get("github_enabled") else "")
+except Exception: pass' "$DEST/settings.json" 2>/dev/null)"
+if [ -n "$gh_user" ] && [ -f "$DEST/github_check.py" ]; then
+  out "7. GitHub account @$gh_user"
+  ghout="$("$PY" "$DEST/github_check.py" "$gh_user" 2>&1)"; ghrc=$?
+  while IFS= read -r l; do
+    case "$l" in
+      *"🛑"*) danger=$((danger+1)); out "$l" ;;
+      *"⚠️"*) warn=$((warn+1)); out "$l" ;;
+      "") ;;
+      *) out "  $l" ;;
+    esac
+  done <<< "$ghout"
+  [ $ghrc -eq 3 ] && chk "the GitHub check could not run (see the line above)"
+fi
+
 # ---------------------------------------------------------------- verdict
 out ""
 if [ $danger -gt 0 ]; then verdict="ACTION NEEDED — $danger serious finding(s). Don't open affected projects; see docs/after-a-scan/if-danger-found.md"

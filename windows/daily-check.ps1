@@ -115,6 +115,21 @@ Get-ChildItem "$HOME\.vscode\extensions", "$HOME\.cursor\extensions" -Directory 
     ForEach-Object { Chk "editor extension installed/updated in last 24h: $($_.Name) - make sure you trust its publisher" }
 if ($script:danger -eq $n -and $script:warn -eq $nw) { Add-Line '  OK intact' }
 
+# 7. GitHub account (opt-in, set in the dashboard's Settings)
+$ghUser = ''
+try { $st = Get-Content "$Dest\settings.json" -Raw -ErrorAction Stop | ConvertFrom-Json; if ($st.github_enabled) { $ghUser = "$($st.github_user)" } } catch { }
+if ($py -and $ghUser -and (Test-Path "$Dest\github_check.py")) {
+    Add-Line "7. GitHub account @$ghUser"
+    $json = Invoke-Native { & $py.Exe @($py.Args) "$Dest\github_check.py" $ghUser --json 2>$null }
+    $res = $null; try { $res = ($json -join "`n") | ConvertFrom-Json } catch { }
+    if (-not $res) { Chk 'the GitHub check could not run' }
+    elseif ($res.error) { Chk "the GitHub check could not run: $($res.error)" }
+    else {
+        foreach ($f in $res.findings) { if ($f[0] -eq 'DANGER') { Bad "$($f[1]): $($f[2])" } else { Chk "$($f[1]): $($f[2])" } }
+        if (-not $res.findings) { Add-Line "  OK $($res.repos) repositories, $(@($res.scanned).Count) recently pushed scanned - no malware" }
+    }
+}
+
 # verdict
 if ($script:danger -gt 0) { $verdict = "ACTION NEEDED - $($script:danger) serious finding(s). Don't open affected projects; see docs\after-a-scan\if-danger-found.md" }
 elseif ($script:warn -gt 0) { $verdict = "Clean, $($script:warn) item(s) worth a look" }

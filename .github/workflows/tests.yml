@@ -24,8 +24,39 @@ jobs:
           python-version: "3.12"
       - name: Self-test (must-catch / must-warn / must-pass / security / consistency)
         run: python scanner/tests/run_tests.py
-      - name: Scanner runs on Python 3.8 syntax level
-        run: python -c "import ast,sys; ast.parse(open('scanner/checkrepo.py', encoding='utf-8').read(), feature_version=(3, 8))"
+      - name: GitHub check (offline tests)
+        run: python scanner/tests/test_github_check.py
+      - name: Python 3.8 syntax level (scanner, GitHub check, dashboard backend)
+        shell: bash
+        run: for f in scanner/*.py app/dashboard.py app/backend/*.py; do python -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), feature_version=(3, 8))" "$f" || exit 1; done
+
+  dashboard:
+    name: dashboard backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Backend tests (API security checks, parsing, validation)
+        run: python app/tests/test_backend.py
+
+  dashboard-ui:
+    name: dashboard UI (type check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax check every module
+        run: for f in app/ui/js/*.js app/ui/js/pages/*.js; do node --check "$f" || exit 1; done
+      - name: Type check (JSDoc + @ts-check; CI only, nothing is installed for users)
+        run: npx --yes --package=typescript@5.6.3 -- tsc -p app/ui/jsconfig.json
 
   unix-scripts:
     name: shell scripts (${{ matrix.os }})

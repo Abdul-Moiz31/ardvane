@@ -19,6 +19,16 @@ Thank you for helping other developers stay safe.
 3. Prefer **WARNING** over **DANGER** unless the evidence is specific to the campaign: DANGER blocks clones and pushes,
    so a false DANGER breaks people's work.
 4. Keep `checkrepo.py` dependency-free and read-only.
+5. `github_check.py` changes need an offline test in `scanner/tests/test_github_check.py` (never call the network in tests).
+
+## Rules for changes to the dashboard (`app/`)
+
+1. No dependencies: Python standard library in `app/backend/`, plain JavaScript modules in `app/ui/` (no npm, no
+   build step, no CDN). Add `// @ts-check` and JSDoc types to JavaScript files; CI type-checks them.
+2. Never insert data into the page as HTML — build elements with `h()` from `ui/js/dom.js`.
+3. Every API input is validated on the server, and security checks get a test in `app/tests/test_backend.py`.
+4. The dashboard never changes the system itself: it calls the kit's reviewed scripts in `mac/` and `windows/`.
+5. Keep one responsibility per module, and put shared helpers in one place instead of copying them.
 
 ## Reporting a problem in the kit itself
 
