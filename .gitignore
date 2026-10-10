@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.bak-checkrepo
+scan-report-*.txt
+# personal drafts kept local
+7-article/

@@ -1,0 +1,28 @@
+name: Windows test report
+description: Tell us how the Windows (beta) scripts worked on your PC
+labels: [windows]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Windows / PowerShell / Python / Git versions
+      placeholder: Windows 11 23H2, PowerShell 5.1, Python 3.12, Git 2.46
+    validations:
+      required: true
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What did you run?
+      options:
+        - label: scan-my-machine.ps1
+        - label: 3-checkrepo\windows\install.ps1
+        - label: git clone / pull / push after installing (safe clone + hooks)
+        - label: 4-daily-routine\windows\install-routine.ps1
+        - label: 3-checkrepo\windows\uninstall.ps1
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Paste the output (remove anything private). Errors are especially useful.
+    validations:
+      required: true

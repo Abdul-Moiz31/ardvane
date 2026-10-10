@@ -1,0 +1,19 @@
+# Compromised Packagist (PHP) packages reported in the PolinRider campaign
+# Part of polinrider-survival-kit (MIT). One package name per line; lines starting with # are comments.
+# Last updated: 2026-10-10
+# Sources (credit to the researchers and maintainers who found these):
+#   - polinrider-cleaner ioc/bad-packages.txt (MIT) — https://github.com/meSingh/polinrider-cleaner
+#   - Bedri-B/polinrider (MIT) — https://github.com/Bedri-B/polinrider
+#   - OpenSourceMalware PolinRider dossier — https://github.com/OpenSourceMalware/PolinRider
+#   - OpenSourceMalware, "PolinRider Jumps the Fence to Go, Packagist, npm, PyPI" — https://opensourcemalware.com/blog/polinrider-jumps-the-fence
+# If you find one of these in your project: do NOT run it. See ../6-after-a-scan/if-danger-found.md
+thiio/kubernetes-php-sdk
+arsl/optima-class
+olc/olc-php
+sevenspan/laravel-whatsapp
+adxio/twig-hmvc
+sevenspan/code-generator
+lambda-platform/moqup
+roberts/leads
+sevenspan/laravel-chat
+plusinfolab/logstation

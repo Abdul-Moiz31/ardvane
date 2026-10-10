@@ -1,0 +1,31 @@
+name: False alarm
+description: checkrepo flagged something that is not malware
+labels: [false-positive]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks! Please don't paste secrets or private code. A file type and the rule are usually enough."
+  - type: input
+    id: rule
+    attributes:
+      label: Rule and message
+      description: The line checkrepo printed, e.g. `.vscode/tasks.json — task auto-runs a disguised file…`
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity shown
+      options: [DANGER, WARNING]
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it's legitimate
+      description: What the file is for. A public repository link or a minimal anonymised example helps a lot.
+  - type: input
+    id: env
+    attributes:
+      label: OS / Python version
+      placeholder: macOS 26, Python 3.12

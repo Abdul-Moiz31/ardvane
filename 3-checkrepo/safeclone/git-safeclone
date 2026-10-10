@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# polinrider-survival-kit — safe clone (macOS / Linux / Git Bash).
+# Clones WITHOUT writing project files, scans a private copy, and only writes the files if clean.
+# If malware is found, no project files are written and the download is moved to the Trash (macOS)
+# or to ~/.checkrepo/quarantine.
+# The installer adds a shell function so `git clone ...` goes through this script.
+# Bypass (only if you are sure): command git clone ...
+
+RED=$'\033[1;31m'; RST=$'\033[0m'
+CHECKREPO="${CHECKREPO:-$HOME/.checkrepo/checkrepo.py}"
+PY=""
+for c in python3 python py; do   # test each: on Windows "python3" may be a Microsoft Store stub that doesn't run
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then PY="$c"; break; fi
+done
+
+# --- work out the target folder from the clone arguments ---
+args=("$@"); pos=(); recurse=0; passthrough=0; i=0
+takes_value=" -b --branch -o --origin -c --config --depth --reference --reference-if-able --separate-git-dir -j --jobs --filter --template -u --upload-pack --shallow-since --shallow-exclude --server-option --bundle-uri --ref-format "
+while [ $i -lt ${#args[@]} ]; do
+  a="${args[$i]}"
+  case "$a" in
+    --recursive|--recurse-submodules|--recurse-submodules=*) recurse=1 ;;
+    --bare|--mirror|-n|--no-checkout) passthrough=1 ;;   # no working files are written anyway
+    --) pos+=("${args[@]:$((i+1))}"); break ;;
+    --*=*) ;;
+    -*) [[ "$takes_value" == *" $a "* ]] && i=$((i+1)) ;;
+    *) pos+=("$a") ;;
+  esac
+  i=$((i+1))
+done
+url="${pos[0]:-}"
+if [ ${#pos[@]} -ge 2 ]; then dest="${pos[1]}"; else dest="$(basename "${url%/}")"; dest="${dest%.git}"; dest="${dest##*:}"; fi
+if [ $passthrough -eq 1 ] || [ -z "$PY" ] || [ ! -f "$CHECKREPO" ] || [ -z "$url" ] || [ -z "$dest" ] || [ -e "$dest" ]; then
+  # nothing to protect (bare/no-checkout) or can't run safely — normal clone; the post-checkout hook still scans and warns
+  exec git clone "$@"
+fi
+
+quarantine() {   # move the download out of the way; Trash first (macOS), else ~/.checkrepo/quarantine
+  local name="BLOCKED-$(basename "$dest")-$(date +%Y%m%d-%H%M%S)"
+  if [ -d "$HOME/.Trash" ] && mv "$dest" "$HOME/.Trash/$name" 2>/dev/null; then echo "the Trash"; return; fi
+  mkdir -p "$HOME/.checkrepo/quarantine" && mv "$dest" "$HOME/.checkrepo/quarantine/$name" && echo "~/.checkrepo/quarantine"
+}
+blocked() {
+  echo "${RED}CLONE BLOCKED — malware found. $1 The download was moved to $(quarantine).${RST}" >&2
+  printf '   If you are 100%% sure this is a false alarm: command git clone' >&2; printf ' %q' "$@" >&2; echo >&2
+  exit 1
+}
+
+# --- 1. clone without checking out any files ---
+git clone --no-checkout "$@" || exit $?
+git -C "$dest" rev-parse -q --verify HEAD >/dev/null || { echo "(empty repository)"; exit 0; }
+
+# --- 2. write the files into a private temp folder, scan, delete the temp folder ---
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/safeclone.XXXXXX")"; tmp="$(cd "$tmp" && pwd)"
+# (not `git archive`: a repo could hide files from it via .gitattributes export-ignore)
+git -C "$dest" -c core.fsmonitor=false --work-tree="$tmp" checkout -q -f HEAD -- . 2>/dev/null
+"$PY" "$CHECKREPO" --quiet "$tmp" | sed "s#$tmp#$dest (not unpacked)#"
+rc=${PIPESTATUS[0]}
+rm -rf "$tmp"
+[ "$rc" -eq 1 ] && blocked "No project files were written." "$@"
+
+# --- 3. clean -> write the files; with submodules, scan again after they are fetched ---
+git -C "$dest" reset -q --hard HEAD
+if [ $recurse -eq 1 ]; then
+  git -C "$dest" submodule update --init --recursive
+  "$PY" "$CHECKREPO" --quiet --include-deps "$dest"; src=$?
+  [ "$src" -eq 1 ] && blocked "A submodule contains malware." "$@"
+  [ "$src" -eq 2 ] && rc=2
+fi
+[ "$rc" -eq 2 ] && echo "(cloned, but see the warnings above)" >&2
+exit 0

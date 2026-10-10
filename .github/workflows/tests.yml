@@ -1,0 +1,82 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scanner:
+    name: scanner self-test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Self-test (must-catch / must-warn / must-pass / security / consistency)
+        run: python 3-checkrepo/tests/run_tests.py
+      - name: Scanner runs on Python 3.8 syntax level
+        run: python -c "import ast,sys; ast.parse(open('3-checkrepo/checkrepo.py', encoding='utf-8').read(), feature_version=(3, 8))"
+
+  unix-scripts:
+    name: shell scripts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: for f in scan-my-machine.sh 3-checkrepo/mac/*.sh 3-checkrepo/hooks/dispatch 3-checkrepo/safeclone/git-safeclone 4-daily-routine/mac/*.sh; do bash -n "$f" || exit 1; done
+      - name: Install into a throw-away home folder, then uninstall
+        run: |
+          export HOME="$RUNNER_TEMP/home"; mkdir -p "$HOME"; touch "$HOME/.bashrc"
+          bash 3-checkrepo/mac/install.sh --no-npm --no-editor
+          "$HOME/.checkrepo/bin/checkrepo" --version
+          test "$(git config --global core.hooksPath)" = "$HOME/.checkrepo/hooks"
+          bash 3-checkrepo/mac/uninstall.sh
+          test -z "$(git config --global core.hooksPath || true)"
+      - name: One-command scan runs (quick mode)
+        run: bash scan-my-machine.sh --quick || [ $? -eq 2 ]
+
+  windows-scripts:
+    name: PowerShell scripts (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Parse every .ps1 with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            if ($errors) { $failed = $true; Write-Host "::error file=$($_.FullName)::$($errors -join '; ')" } else { Write-Host "OK $($_.Name)" }
+          }
+          if ($failed) { exit 1 }
+      - name: Every .ps1 is plain ASCII (PowerShell 5.1 safe)
+        shell: powershell
+        run: |
+          $bad = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { [IO.File]::ReadAllBytes($_.FullName) | Where-Object { $_ -gt 127 } | Select-Object -First 1 }
+          if ($bad) { $bad | ForEach-Object { Write-Host "::error file=$($_.FullName)::non-ASCII characters" }; exit 1 }
+      - name: Installer dry run
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\3-checkrepo\windows\install.ps1 -DryRun
+      - name: One-command scan runs (quick mode)
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1 -Quick
+          if ($LASTEXITCODE -eq 1) { exit 1 } else { exit 0 }
