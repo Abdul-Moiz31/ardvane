@@ -2,6 +2,7 @@
 """Publish a GitHub release for the version in app/backend/config.py, once.
 
     python3 .github/scripts/release.py --check     verify the version has release notes in CHANGELOG.md (CI, every PR)
+    python3 .github/scripts/release.py --version   print the version (used by the PyPI job)
     python3 .github/scripts/release.py             create tag + release v<version> unless it exists (release workflow)
 
 To release: in a pull request, raise VERSION in app/backend/config.py and add a "## <version>" section to CHANGELOG.md.
@@ -48,6 +49,9 @@ def gh(*args):
 
 def main(argv):
     ver = version()
+    if "--version" in argv:
+        print(ver)
+        return 0
     body = notes(ver)
     if "--check" in argv:
         print(f"{PRODUCT} {ver}: release notes found ({len(body.splitlines())} lines)")

@@ -3,6 +3,23 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.2.0
+
+**Install Ardvane with one command.** No cloning needed.
+
+```bash
+brew install abdul-moiz31/ardvane/ardvane     # macOS (Homebrew)
+pipx install ardvane                          # macOS, Linux and Windows
+```
+
+Then run `ardvane` to open the dashboard.
+
+- New terminal commands: `ardvane scan`, `ardvane check <folder>`, `ardvane protect`, `ardvane unprotect`,
+  `ardvane fixes`, `ardvane launcher`. Run `ardvane --help` for all of them.
+- Published to PyPI automatically with every release (trusted publishing, no stored passwords or tokens), and to
+  Homebrew through the `abdul-moiz31/ardvane` tap, which follows releases by itself.
+- The app icon now opens the installed `ardvane` command, so it keeps working after upgrades.
+
 ## 0.1.0
 
 The first release of **Ardvane**: free, open-source protection for developers against malware that spreads through code

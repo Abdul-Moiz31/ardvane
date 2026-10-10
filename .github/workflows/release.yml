@@ -26,3 +26,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: python3 .github/scripts/release.py
+
+  pypi:
+    # `pipx install ardvane`: publish the same version to PyPI, once. Trusted publishing: PyPI checks that the upload
+    # comes from this workflow in this repository, so no password or token is stored anywhere.
+    needs: release
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write      # proves to PyPI which workflow is uploading
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Build the package unless this version is already on PyPI
+        id: build
+        run: |
+          VERSION="$(python3 .github/scripts/release.py --version)"
+          if curl -sf "https://pypi.org/pypi/ardvane/$VERSION/json" > /dev/null; then
+            echo "ardvane $VERSION is already on PyPI"; echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            python3 packaging/build_wheel.py; echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish to PyPI
+        if: steps.build.outputs.publish == 'true'
+        uses: pypa/gh-action-pypi-publish@v1.14.2

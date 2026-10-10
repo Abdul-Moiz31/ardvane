@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 
+from . import actions
 from .config import IS_WIN, KIT, SCANS
 from .system import NO_WINDOW, python_exe, run, short_hash
 
@@ -82,10 +83,7 @@ class ScanJob:
 
     # -- running ---------------------------------------------------------------------------------------------
     def _machine_command(self):
-        if IS_WIN:
-            return (["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", os.path.join(KIT, "scan-my-machine.ps1")]
-                    + (["-Quick"] if self.mode == "quick" else []) + self.folders)
-        return ["bash", os.path.join(KIT, "scan-my-machine.sh")] + (["--quick"] if self.mode == "quick" else []) + self.folders
+        return actions.scan_command(self.mode == "quick", self.folders)
 
     def _start(self, cmd, **kw):
         with self.lock:

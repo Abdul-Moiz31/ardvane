@@ -21,8 +21,12 @@ def run(cmd, timeout=60, env=None):
         return -1, str(e)
 
 
+def powershell_command(script, *args):
+    return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, *args]
+
+
 def powershell(script, *args, timeout=600, env=None):
-    return run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script] + list(args), timeout, env)
+    return run(powershell_command(script, *args), timeout, env)
 
 
 def python_exe():

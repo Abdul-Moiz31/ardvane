@@ -5,3 +5,4 @@ __pycache__/
 scan-report-*.txt
 # personal drafts kept local
 7-article/
+dist/

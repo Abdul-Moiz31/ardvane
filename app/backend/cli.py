@@ -10,20 +10,27 @@ import time
 import urllib.request
 import webbrowser
 
-from . import launcher
-from .config import APP_NAME, IDLE_LIMIT, INSTANCE, VERSION
+import subprocess
+
+from . import actions, launcher
+from .config import APP_NAME, IDLE_LIMIT, INSTALLED, INSTANCE, KIT, VERSION
 from .server import App, Handler
-from .system import read_json, write_private
+from .system import python_exe, read_json, write_private
 
-USAGE = f"""{APP_NAME} — local dashboard for Ardvane
+PROG = "ardvane" if INSTALLED else "python3 app/dashboard.py"
+USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads through code. Runs only on this computer.
 
-  python3 app/dashboard.py                  open the dashboard in your browser
-  python3 app/dashboard.py --no-browser     print the address instead of opening it
-  python3 app/dashboard.py launcher         add an app icon (Applications / Start menu / applications menu)
-  python3 app/dashboard.py launcher --remove
-  python3 app/dashboard.py --version
+  {PROG}                             open the dashboard (add --no-browser to print its address instead)
+  {PROG} scan [--quick] [FOLDER ...]  read-only scan of this computer and your projects
+  {PROG} check [FOLDER]               scan one folder before you open it: a download, a coding test, a colleague's repo
+  {PROG} protect [--dry-run]          turn on protection: git hooks, safe clone, npm and editor hardening
+  {PROG} unprotect                    remove protection and restore your previous settings
+  {PROG} fixes [list | history | fix ID | undo ID]
+                                       fixes Ardvane can make for you, with undo
+  {PROG} launcher [--remove]          add (or remove) the app icon
+  {PROG} --version
 
-Everything runs on this computer (127.0.0.1). The dashboard stops by itself a few minutes after you close its tab.
+The dashboard runs on 127.0.0.1 and stops by itself a few minutes after you close its tab.
 """
 
 
@@ -58,7 +65,7 @@ def _stop_on_sigterm(signum, frame):
 def serve(open_browser=True, port=0):
     url = running_instance()
     if url:
-        print(f"{APP_NAME} is already open.")
+        print(f"{APP_NAME} is already open.", flush=True)
         if open_browser:
             webbrowser.open(url)
         return 0
@@ -71,12 +78,12 @@ def serve(open_browser=True, port=0):
     url = f"http://127.0.0.1:{App.port}/#k={App.token}"
     threading.Thread(target=_watchdog, daemon=True).start()
     signal.signal(signal.SIGTERM, _stop_on_sigterm)
-    print(f"{APP_NAME} is running on this computer only (port {App.port}).")
-    print("It stops by itself a few minutes after you close the browser tab, or press Ctrl+C.")
+    print(f"{APP_NAME} is running on this computer only (port {App.port}).", flush=True)
+    print("It stops by itself a few minutes after you close the browser tab, or press Ctrl+C.", flush=True)
     if open_browser:
         webbrowser.open(url)
     else:
-        print("Open this address — it contains your private key, don't share it:", url)
+        print("Open this address — it contains your private key, don't share it:", url, flush=True)
     try:
         App.httpd.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
@@ -92,24 +99,48 @@ def serve(open_browser=True, port=0):
     return 0
 
 
+def _call(cmd):
+    """Run one of the kit's own scripts in this terminal and return its exit code."""
+    try:
+        return subprocess.call(cmd)
+    except KeyboardInterrupt:
+        return 130
+    except OSError as e:
+        print(f"{APP_NAME}: could not start {cmd[0]}: {e}", file=sys.stderr)
+        return 3
+
+
+def _scanner(name, args):
+    return _call([python_exe(), os.path.join(KIT, "scanner", name), *args])
+
+
+# `ardvane <command> ...`: each command runs the same reviewed script the dashboard uses
+COMMANDS = {
+    "scan": lambda a: _call(actions.scan_command("--quick" in a, [x for x in a if x != "--quick"])),
+    "check": lambda a: _scanner("checkrepo.py", a),
+    "protect": lambda a: _call(actions.installer_command("install", "--dry-run" in a)),
+    "unprotect": lambda a: _call(actions.installer_command("uninstall")),
+    "fixes": lambda a: _scanner("autofix.py", a or ["list"]),
+    "launcher": lambda a: print((launcher.remove() if "--remove" in a else launcher.install())[1]) or 0,
+}
+
+
 def main(argv):
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(errors="replace")
         except (AttributeError, ValueError):
             pass
-    if argv[:1] in (["-h"], ["--help"]):
+    if argv[:1] in (["-h"], ["--help"], ["help"]):
         print(USAGE)
         return 0
-    if argv[:1] == ["--version"]:
+    if argv[:1] in (["--version"], ["version"]):
         print(APP_NAME, VERSION)
         return 0
-    if argv[:1] == ["launcher"]:
-        code, message = launcher.remove() if "--remove" in argv else launcher.install()
-        print(message)
-        return code
+    if argv and argv[0] in COMMANDS:
+        return COMMANDS[argv[0]](argv[1:])
     unknown = [a for a in argv if a != "--no-browser"]
     if unknown:
-        print(f"unknown option: {unknown[0]}\n\n{USAGE}", file=sys.stderr)
+        print(f"unknown command: {unknown[0]}\n\n{USAGE}", file=sys.stderr)
         return 3
     return serve(open_browser="--no-browser" not in argv)

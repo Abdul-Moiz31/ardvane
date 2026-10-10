@@ -4,10 +4,11 @@ import sys
 
 APP_NAME = "Ardvane"                      # the product name lives here and in ui/index.html
 APP_ID = "ardvane"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KIT = os.environ.get("POLINRIDER_KIT") or os.path.dirname(APP_DIR)
+KIT = os.environ.get("ARDVANE_KIT") or os.environ.get("POLINRIDER_KIT") or os.path.dirname(APP_DIR)
+INSTALLED = bool(os.environ.get("ARDVANE_INSTALLED"))   # started by the installed `ardvane` command (pipx / Homebrew)
 UI = os.path.join(APP_DIR, "ui")
 
 HOME = os.path.expanduser("~")

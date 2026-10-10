@@ -6,7 +6,8 @@ runs, read the guides. It runs **only on your computer**, with no account and no
 ## Open it
 
 ```bash
-python3 app/dashboard.py          # Windows: py -3 app\dashboard.py
+ardvane                           # after `brew install abdul-moiz31/ardvane/ardvane` or `pipx install ardvane`
+python3 app/dashboard.py          # from a clone of the repository (Windows: py -3 app\dashboard.py)
 ```
 
 Your browser opens the dashboard. To skip the terminal next time, go to **Protection → App icon → Add app icon**.

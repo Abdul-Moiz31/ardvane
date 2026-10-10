@@ -35,7 +35,9 @@ Thank you for helping other developers stay safe.
 Releases are automatic. In a pull request, raise `VERSION` in `app/backend/config.py` (semantic versioning: `0.1.1` for
 fixes, `0.2.0` for new features) and add a `## <version>` section to `CHANGELOG.md`. CI fails if the version has no
 notes. When the pull request is merged and the tests pass on `main`, `.github/workflows/release.yml` tags the commit
-`v<version>` and publishes the release with those notes. Merges that don't change the version publish nothing.
+`v<version>`, publishes the release with those notes and uploads the package to PyPI (`pipx install ardvane`); the
+Homebrew tap ([abdul-moiz31/homebrew-ardvane](https://github.com/Abdul-Moiz31/homebrew-ardvane)) picks the release up by
+itself within a few hours. Merges that don't change the version publish nothing.
 
 ## Reporting a problem in the kit itself
 

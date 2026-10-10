@@ -47,6 +47,29 @@ jobs:
       - name: Backend tests (API security checks, parsing, validation)
         run: python app/tests/test_backend.py
 
+  package:
+    name: package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build the wheel, install it offline, run the `ardvane` command
+        shell: bash
+        run: |
+          python packaging/build_wheel.py
+          python -m venv "$RUNNER_TEMP/venv"
+          BIN="$RUNNER_TEMP/venv/bin"; [ -d "$RUNNER_TEMP/venv/Scripts" ] && BIN="$RUNNER_TEMP/venv/Scripts"
+          "$BIN/python" -m pip install --no-index dist/ardvane-*.whl
+          "$BIN/ardvane" --version
+          "$BIN/python" -m ardvane --version
+          "$BIN/ardvane" check app
+
   dashboard-ui:
     name: dashboard UI (type check)
     runs-on: ubuntu-latest
