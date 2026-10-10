@@ -38,11 +38,18 @@ function statusBanner(p, pc) {
 /** @param {any} p */
 function appIcon(p) {
   /** @type {Record<string, string>} */
-  const where = { mac: 'Open this dashboard from Launchpad or Spotlight — no terminal needed.',
-    windows: 'Open this dashboard from the Start menu — no terminal needed.', linux: 'Open this dashboard from your applications menu.' };
+  /** @type {Record<string, string[]>} [what adding does, how to open it once added] */
+  const where = {
+    mac: ['Adds Ardvane to your Applications folder, so you can open it like any other app: from Launchpad, Spotlight or the Dock. No Terminal needed.',
+      'Open Ardvane from Launchpad, or press ⌘ Space and type "Ardvane". To keep it in the Dock: open it, then right-click its Dock icon → Options → Keep in Dock.'],
+    windows: ['Adds Ardvane to your Start menu, so you can open it like any other app. No terminal needed.',
+      'Open Ardvane from the Start menu, or press the Windows key and type "Ardvane".'],
+    linux: ['Adds Ardvane to your applications menu, so you can open it like any other app.', 'Open Ardvane from your applications menu.'],
+  };
+  const [what, how] = where[S.data.os] || where.linux;
   const btn = button(p.launcher ? 'Remove' : 'Add app icon', () => launcherAction(p.launcher ? 'remove' : 'install', btn), p.launcher ? 'btn-sm btn-ghost' : 'btn-sm btn-primary');
   return h('div', { class: 'card' }, h('div', { class: 'list' }, h('div', { class: 'list-row' },
     h('div', { class: 'row-icon brand' }, icon('app')),
-    h('div', { class: 'grow' }, h('div', { class: 'title', text: 'App icon' }), h('div', { class: 'desc', text: where[S.data.os] })),
+    h('div', { class: 'grow' }, h('div', { class: 'title', text: 'Ardvane app icon' }), h('div', { class: 'desc', text: p.launcher ? how : what })),
     p.launcher ? pill('ok', 'Added', 'check') : pill('neutral', 'Not added'), btn)));
 }

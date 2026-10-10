@@ -4,7 +4,7 @@ import sys
 
 APP_NAME = "Ardvane"                      # the product name lives here and in ui/index.html
 APP_ID = "ardvane"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT = os.environ.get("ARDVANE_KIT") or os.environ.get("POLINRIDER_KIT") or os.path.dirname(APP_DIR)
@@ -29,5 +29,5 @@ ROUTINE_LABEL = "com.polinrider-survival-kit.daily-check"      # macOS launchd j
 ROUTINE_TASK = "polinrider-survival-kit daily check"           # Windows scheduled task (windows/install-routine.ps1)
 RC_MARKER = "# >>> polinrider-survival-kit >>>"                # block the installer adds to shell profiles
 
-IDLE_LIMIT = 300            # seconds without a request from the tab before the dashboard stops itself
+IDLE_LIMIT = 1200           # seconds without a request from the tab before the dashboard stops itself (browsers pause background tabs)
 DEFAULT_FOLDERS = ["~/Documents", "~/Desktop", "~/Downloads", "~/code", "~/projects"] + (["~/source/repos"] if IS_WIN else [])

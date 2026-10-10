@@ -63,7 +63,8 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 
 - **Protection → Turn on protection**: you see every change before it's made
 - **Overview → Daily check**: choose your time (9:00 by default)
-- **Protection → Add app icon**: open Ardvane from Launchpad / the Start menu from now on, no terminal needed
+- **Protection → Add app icon**: adds Ardvane to your Applications folder (Start menu on Windows), so from now on you
+  open it from Launchpad, Spotlight or the Dock, with no terminal
 
 → [Dashboard guide](docs/dashboard.md)
 
