@@ -5,6 +5,20 @@ Each version's section becomes its GitHub release notes automatically. To releas
 
 ## 0.2.1
 
+**The GitHub check now sees everything.** It used to stop at your first 100 repositories and skip repositories over
+200 MB. A real infected 202 MB repository was missed that way.
+
+- Every repository is listed, not just the first 100.
+- No fixed size limit. Downloads are streamed to disk instead of memory, and stop only if less than 2 GB of disk space
+  would be left (or after 30 minutes). Single files over 20 MB, such as videos or models, are listed as not scanned.
+- New `--all-branches` option: the worm pushes into every branch, not only the main one.
+- Harder to trick: files whose names differ only in upper/lower case are both scanned, one file with a name this
+  computer can't store no longer stops the whole branch from being scanned, and oversized archives ("tar bombs")
+  can't fill the disk.
+- More reliable: GitHub's rate limit stops the check once with a clear message, timeouts and empty repositories no
+  longer cause errors, and temporary folders left by an interrupted check are cleaned up.
+- Scan reports are saved in `~/.checkrepo/reports/scans`, where the dashboard lists them, instead of inside the app's
+  folder (which an upgrade replaces). The end of a scan now says `ardvane protect` instead of a script path.
 - The "Ardvane has stopped" message now says how to reopen it: the app icon, or `ardvane` in Terminal.
 - The dashboard waits 20 minutes (was 5) before closing itself, because browsers pause background tabs.
 - "Add app icon" explains what it does: it adds Ardvane to your Applications folder (Start menu on Windows), so you

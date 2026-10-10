@@ -7,8 +7,8 @@
 #   bash scan-my-machine.sh PATH ...   scan these project folders instead of your whole home folder
 #
 # Exit code: 0 clean, 1 malware evidence found, 2 only items worth a look.
-# A copy of the report is saved as scan-report-YYYY-MM-DD-HHMM.txt next to this script
-# (or in ~/.checkrepo/reports/scans if this folder isn't writable, or in $SCAN_REPORT_DIR).
+# A copy of the report is saved as scan-report-YYYY-MM-DD-HHMM.txt in ~/.checkrepo/reports/scans, where the
+# dashboard lists it (or in $SCAN_REPORT_DIR). Never inside the app's own folder, which upgrades replace.
 # For the dashboard: if $SCAN_EVENTS names a file, every result is also appended to it as
 # tab-separated lines: TYPE <tab> message <tab> path  (TYPE: H section, D danger, W check, O ok, I info, P progress, R result)
 
@@ -23,9 +23,10 @@ for a in "$@"; do case "$a" in
 [ ${#ROOTS[@]} -eq 0 ] && ROOTS=("$HOME")
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 OS="$(uname)"
-REPORT_DIR="${SCAN_REPORT_DIR:-$KIT}"
+REPORT_DIR="${SCAN_REPORT_DIR:-$HOME/.checkrepo/reports/scans}"
 mkdir -p "$REPORT_DIR" 2>/dev/null
-[ -w "$REPORT_DIR" ] || { REPORT_DIR="$HOME/.checkrepo/reports/scans"; mkdir -p "$REPORT_DIR"; }
+[ -w "$REPORT_DIR" ] || { REPORT_DIR="${TMPDIR:-/tmp}"; }
+if [ -n "${ARDVANE_INSTALLED:-}" ]; then PROTECT="ardvane protect"; else PROTECT="bash $KIT/mac/install.sh"; fi
 REPORT="$REPORT_DIR/scan-report-$(date +%Y-%m-%d-%H%M).txt"
 if [ -t 1 ]; then R=$'\033[1;31m'; Y=$'\033[1;33m'; G=$'\033[1;32m'; B=$'\033[1m'; D=$'\033[2m'; X=$'\033[0m'; else R=; Y=; G=; B=; D=; X=; fi
 danger=0; warn=0
@@ -228,7 +229,7 @@ else
   say "${G}${B}RESULT: CLEAN — no signs of this malware.${X}"
   code=0
 fi
-say "Protect yourself from now on (scans every clone/pull/push automatically):  bash mac/install.sh"
+say "Protect yourself from now on (scans every clone/pull/push automatically):  $PROTECT"
 say "${D}Report saved: $REPORT${X}"
 ev R "$code" "$REPORT"
 exit $code

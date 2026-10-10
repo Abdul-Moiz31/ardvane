@@ -6,8 +6,9 @@ Part of Ardvane (MIT License). Python 3.8+, no dependencies.
 What it does (never changes anything on GitHub):
   1. Lists the account's repositories and the ones pushed recently.
   2. Warns when many repositories were pushed within one hour (the worm force-pushes into every repo it can reach).
-  3. Downloads the default branch of each recently pushed repository as an archive into a temporary folder,
-     scans it with checkrepo, and deletes the temporary folder. Nothing from the archive is ever run.
+  3. Downloads the default branch (or, with --all-branches, every branch) of each recently pushed repository as an
+     archive into a temporary folder, scans it with checkrepo, and deletes the temporary folder. Nothing from the
+     archive is ever run.
 
 Access:
   - If the GitHub CLI (`gh`) is installed and logged in, it is used, so private repositories are checked too.
@@ -15,7 +16,12 @@ Access:
   - Otherwise the public API is used (public repositories only, 60 requests per hour).
 
 Usage:
-  github_check.py USERNAME [--days N] [--max-repos N] [--json] [--rescan]
+  github_check.py USERNAME [--days N] [--max-repos N] [--all-branches] [--json] [--rescan]
+
+Limits: every repository of the account is listed (all pages). An archive holds only the latest files of one branch,
+not the history, so it is much smaller than the repository size GitHub shows. Archives are streamed to a temporary file
+(not kept in memory), so size is limited only by free disk space: a download stops if it would leave less than 2 GB
+free (hard cap 10 GB). Single files over 20 MB (videos, models, datasets) are not scanned; malware payloads are tiny.
 
 Repositories already scanned clean are skipped until they receive a new push (remembered in
 ~/.checkrepo/github-seen.json); --rescan scans them again.
@@ -30,16 +36,33 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import unicodedata
+import threading
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kitlib import DEST, load_checkrepo, read_json, safe_output, write_json  # noqa: E402
 
 API = "https://api.github.com"
-MAX_ARCHIVE = 60 * 1024 * 1024
+GB = 1024 ** 3
+MAX_ARCHIVE = MAX_EXTRACTED = 10 * GB  # hard caps; in practice free disk space is the limit
+KEEP_FREE = 2 * GB                     # never fill the disk: stop when less than this would be left
+MAX_FILE = 20 * 1024 * 1024            # bigger single files (videos, models, datasets) are not scanned
+CHUNK = 1024 * 1024
+DOWNLOAD_TIMEOUT = 30 * 60             # seconds, for one archive
+PER_PAGE, MAX_PAGES = 100, 50          # lists: up to 5,000 repositories or branches
 BURST_REPOS, BURST_WINDOW = 5, 3600
 SEEN_FILE = os.path.join(DEST, "github-seen.json")
+TMP_PREFIX = "ardvane-gh-"
+RATE_LIMIT_HELP = ("GitHub's hourly limit for checks was reached - try again later"
+                   ", or log in with `gh auth login` (it allows many more checks and includes private repositories)")
+
+
+class RateLimited(RuntimeError):
+    """GitHub refuses further requests for now: stop the whole check instead of failing repo by repo."""
 
 
 def gh_login():
@@ -58,13 +81,17 @@ class Client:
     def __init__(self, use_gh):
         self.use_gh = use_gh
         self.gh = shutil.which("gh") if use_gh else None
+        self.truncated = []                            # lists longer than MAX_PAGES pages (reported as notes)
 
-    def get(self, path, binary=False, limit=5 * 1024 * 1024):
+    def get(self, path, limit=5 * 1024 * 1024):
         if self.gh:
-            r = subprocess.run([self.gh, "api", "-H", "Accept: application/vnd.github+json", path],
-                               capture_output=True, timeout=180)
+            try:
+                r = subprocess.run([self.gh, "api", "-H", "Accept: application/vnd.github+json", path],
+                                   capture_output=True, timeout=180)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("GitHub did not answer within 3 minutes")
             if r.returncode != 0:
-                raise RuntimeError((r.stderr or b"").decode("utf-8", "replace").strip()[:200] or "gh api failed")
+                gh_error((r.stderr or b"").decode("utf-8", "replace"), r.returncode)
             data = r.stdout
         else:
             req = urllib.request.Request(API + path, headers={"Accept": "application/vnd.github+json",
@@ -73,38 +100,180 @@ class Client:
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     data = resp.read(limit + 1)
             except urllib.error.HTTPError as e:
-                if e.code == 403 and e.headers.get("X-RateLimit-Remaining") == "0":
-                    raise RuntimeError("GitHub's hourly limit for anonymous checks was reached - try again later, or log in with `gh auth login` to check private repositories too")
-                if e.code == 404:
-                    raise RuntimeError("not found")
-                raise RuntimeError(f"GitHub returned HTTP {e.code}")
+                http_error(e)
             except urllib.error.URLError as e:
                 raise RuntimeError(f"no connection to GitHub ({e.reason})")
+            except OSError as e:                                    # e.g. a read timeout
+                raise RuntimeError(f"connection to GitHub failed ({e.__class__.__name__})")
         if len(data) > limit:
             raise RuntimeError("response too large")
-        return data if binary else json.loads(data.decode("utf-8"))
+        return json.loads(data.decode("utf-8"))
+
+    def download(self, path, dest):
+        """Stream an archive into the file `dest`. Stops when it gets too big for the free disk space, when the
+        whole download takes longer than DOWNLOAD_TIMEOUT, or when GitHub/gh reports an error."""
+        limit = space_limit(os.path.dirname(dest), MAX_ARCHIVE)
+        if self.gh:
+            p = subprocess.Popen([self.gh, "api", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            src = p.stdout
+        else:
+            p = None
+            req = urllib.request.Request(API + path, headers={"User-Agent": "ardvane"})
+            try:
+                src = urllib.request.urlopen(req, timeout=120)          # per read, so a stalled connection ends
+            except urllib.error.HTTPError as e:
+                http_error(e)
+            except urllib.error.URLError as e:
+                raise RuntimeError(f"no connection to GitHub ({e.reason})")
+        deadline = time.monotonic() + DOWNLOAD_TIMEOUT
+        watchdog = threading.Timer(DOWNLOAD_TIMEOUT, p.kill) if p else None   # a pipe read can't time out by itself
+        if watchdog:
+            watchdog.daemon = True
+            watchdog.start()
+        size, problem = 0, None
+        try:
+            with open(dest, "wb") as out:
+                while True:
+                    try:
+                        chunk = src.read(CHUNK)
+                    except OSError as e:                            # socket timeout or reset
+                        raise RuntimeError(f"download interrupted ({e.__class__.__name__})")
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > limit:
+                        problem = too_big(limit)
+                        break
+                    if time.monotonic() > deadline:
+                        problem = f"download took longer than {DOWNLOAD_TIMEOUT // 60} minutes"
+                        break
+                    out.write(chunk)
+        finally:
+            if watchdog:
+                watchdog.cancel()
+            if p and p.poll() is None and (problem or sys.exc_info()[0]):
+                p.kill()                                   # never leave gh running after we stop reading
+            src.close()
+            err = p.stderr.read().decode("utf-8", "replace").strip() if p else ""
+            code = p.wait() if p else 0
+            if p:
+                p.stderr.close()
+        if problem:
+            raise RuntimeError(problem)
+        if code != 0:
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"download took longer than {DOWNLOAD_TIMEOUT // 60} minutes")
+            gh_error(err, code)
+        return size
+
+    def get_all(self, path):
+        """Every item of a paged list (GitHub returns at most 100 per page)."""
+        items = []
+        for page in range(1, MAX_PAGES + 1):
+            batch = self.get(f"{path}{'&' if '?' in path else '?'}per_page={PER_PAGE}&page={page}")
+            if not isinstance(batch, list):
+                raise RuntimeError("unexpected answer from GitHub")
+            items += batch
+            if len(batch) < PER_PAGE:
+                break
+        else:
+            self.truncated.append(path)
+        return items
+
+
+def gh_error(stderr, code):
+    msg = stderr.strip()
+    if "rate limit" in msg.lower():
+        raise RateLimited(RATE_LIMIT_HELP)
+    raise RuntimeError(msg[:200] or f"gh api failed (exit code {code})")
+
+
+def http_error(e):
+    if e.code in (403, 429) and (e.headers.get("X-RateLimit-Remaining") == "0" or e.code == 429):
+        raise RateLimited(RATE_LIMIT_HELP)
+    raise RuntimeError("HTTP 404: not found" if e.code == 404 else f"GitHub returned HTTP {e.code}")
+
+
+def remove_stale_temp(max_age=24 * 3600):
+    """Temporary folders left behind by a check that was killed (e.g. the computer went to sleep)."""
+    base = tempfile.gettempdir()
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return
+    for name in names:
+        path = os.path.join(base, name)
+        if name.startswith((TMP_PREFIX, "polinrider-gh-")):
+            try:
+                if time.time() - os.path.getmtime(path) > max_age:
+                    shutil.rmtree(path, ignore_errors=True)
+            except OSError:
+                pass
+
+
+def space_limit(folder, cap):
+    """How many bytes may be written into `folder`: the cap, or less so that KEEP_FREE stays free."""
+    limit = min(cap, shutil.disk_usage(folder).free - KEEP_FREE)
+    if limit <= 0:
+        raise RuntimeError(f"less than {KEEP_FREE // GB} GB free on this disk")
+    return limit
+
+
+def too_big(limit):
+    return f"larger than {limit // GB} GB" if limit == MAX_ARCHIVE else \
+        f"too large for the free disk space (Ardvane keeps {KEEP_FREE // GB} GB free)"
 
 
 def parse_time(s):
     return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
 
 
-def safe_extract(blob, dest):
-    """Extract regular files only; refuse absolute paths, '..', links and devices. Strips the top folder."""
-    with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
-        for m in tf.getmembers():
-            parts = m.name.replace("\\", "/").split("/")[1:]       # drop "<owner>-<repo>-<sha>/"
-            if not parts or not m.isfile() or m.name.startswith("/") or ".." in parts or m.size > 20 * 1024 * 1024:
+def safe_extract(archive, dest):
+    """Extract regular files only; refuse absolute paths, '..', links and devices. Strips the top folder.
+    `archive` is the archive's bytes or the path of an archive file.
+
+    Never lets one file stop the scan of the others: a file that can't be written here (a name Windows forbids, a
+    path that is too long) is counted and skipped. Files whose names differ only in upper/lower case (or Unicode
+    form) would overwrite each other on macOS and Windows, which would let malware hide behind a harmless file, so
+    each later one is extracted into its own `.ardvane-same-name-N` folder and scanned too.
+    Stops (RuntimeError) before the extracted files would fill the disk.
+    Returns {"too_large": n, "unwritable": n, "same_name": n}."""
+    limit, total = space_limit(dest, MAX_EXTRACTED), 0
+    counts = {"too_large": 0, "unwritable": 0, "same_name": 0}
+    taken = set()
+    real_dest = os.path.realpath(dest)
+    opened = tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") if isinstance(archive, bytes) else \
+        tarfile.open(archive, mode="r:gz")
+    with opened as tf:
+        for m in tf:
+            parts = [x for x in m.name.replace("\\", "/").split("/")[1:] if x not in ("", ".")]  # drop top folder
+            if not parts or not m.isfile() or m.name.startswith("/") or ".." in parts:
                 continue
-            target = os.path.join(dest, *parts)
-            if not os.path.realpath(target).startswith(os.path.realpath(dest) + os.sep):
+            if m.size > MAX_FILE:
+                counts["too_large"] += 1
                 continue
-            os.makedirs(os.path.dirname(target), exist_ok=True)
+            total += m.size
+            if total > limit:                                      # a "tar bomb" can't fill the disk
+                raise RuntimeError("files " + too_big(limit))
+            key = unicodedata.normalize("NFC", "/".join(parts)).casefold()
+            root = dest
+            if key in taken:
+                counts["same_name"] += 1
+                root = os.path.join(dest, f".ardvane-same-name-{counts['same_name']}")
+            taken.add(key)
+            target = os.path.join(root, *parts)
+            if not os.path.realpath(target).startswith(real_dest + os.sep):
+                continue
             src = tf.extractfile(m)
             if src is None:
                 continue
-            with open(target, "wb") as out:
-                shutil.copyfileobj(src, out)
+            try:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, "wb") as out:
+                    shutil.copyfileobj(src, out)
+            except OSError:
+                counts["unwritable"] += 1
+    return counts
 
 
 def bursts(times):
@@ -130,23 +299,64 @@ def save_seen(seen):
         pass
 
 
-def check(user, days=7, max_repos=15, rescan=False):
+def scan_branch(client, cr, repo, branch, result, maybe_empty=False):
+    """Download one branch as an archive, scan it, delete it. Returns "clean", "found", "empty" or "error".
+    Raises RateLimited, which ends the whole check."""
+    where = f"{repo} ({branch})"
+    tmp = tempfile.mkdtemp(prefix=TMP_PREFIX)
+    archive, files = os.path.join(tmp, "archive.tar.gz"), os.path.join(tmp, "files")
+    try:
+        client.download(f"/repos/{repo}/tarball/{urllib.parse.quote(branch, safe='/')}", archive)
+        os.makedirs(files)
+        counts = safe_extract(archive, files)
+        os.remove(archive)
+        if counts["too_large"]:
+            result["notes"].append(f"{where}: {counts['too_large']} file(s) over {MAX_FILE // (1024 * 1024)} MB not scanned")
+        if counts["unwritable"]:
+            result["notes"].append(f"{where}: {counts['unwritable']} file(s) could not be written on this computer "
+                                   "(name or path not allowed here) and were not scanned")
+        s = cr.Scan(files)
+        s.walk()
+        for sev, rule, rel, detail in s.findings:
+            result["findings"].append([sev, where, f"{rel} - {detail}"])
+        return "found" if s.findings else "clean"
+    except RateLimited:
+        raise
+    except RuntimeError as e:
+        if maybe_empty and ("404" in str(e) or "409" in str(e)):
+            return "empty"                             # GitHub has no archive for a repository without commits
+        result["notes"].append(f"{where}: not scanned ({e})")
+    except (tarfile.TarError, OSError) as e:
+        result["notes"].append(f"{where}: not scanned ({e.__class__.__name__})")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return "error"
+
+
+def seen_ok(seen, repo, all_branches):
+    """True if the repository was scanned clean at this push (a clean all-branches scan also covers default-only)."""
+    v = seen.get(repo["full_name"], "")
+    return v == repo["pushed_at"] + "|all" or (not all_branches and v == repo["pushed_at"])
+
+
+def check(user, days=7, max_repos=15, rescan=False, all_branches=False):
     cr = load_checkrepo()
+    remove_stale_temp()
     login = gh_login()
     client = Client(use_gh=bool(login))
     result = {"user": user, "source": "gh" if login else "public", "repos": 0, "recent": [], "scanned": [],
-              "findings": [], "notes": []}
+              "branches_scanned": 0, "findings": [], "notes": []}
+    # sorted by name, not by push time: a push during the listing can't shift repositories between pages
     if login and login.lower() == user.lower():
-        path = "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=100"
+        path = "/user/repos?affiliation=owner,collaborator,organization_member&sort=full_name"
     else:
-        path = f"/users/{user}/repos?type=owner&sort=pushed&per_page=100"
+        path = f"/users/{user}/repos?type=owner&sort=full_name"
         if login:
             result["notes"].append(f"gh is logged in as {login}, not {user}: only {user}'s public repositories are visible")
         else:
             result["notes"].append("public repositories only - log in with `gh auth login` to include private ones")
-    repos = client.get(path)
-    if not isinstance(repos, list):
-        raise RuntimeError("unexpected answer from GitHub")
+    repos = list({r["full_name"]: r for r in client.get_all(path) if isinstance(r, dict) and r.get("full_name")}.values())
+    repos.sort(key=lambda r: r.get("pushed_at") or "", reverse=True)          # most recently pushed first
     result["repos"] = len(repos)
     now = datetime.datetime.now(datetime.timezone.utc)
     recent = [r for r in repos if r.get("pushed_at") and (now - parse_time(r["pushed_at"])).days < days]
@@ -159,36 +369,50 @@ def check(user, days=7, max_repos=15, rescan=False):
                                    "The worm pushes into many repositories at once - if this wasn't you, act now"])
 
     seen = load_seen()
-    todo = [r for r in recent if rescan or seen.get(r["full_name"]) != r["pushed_at"]]
+    todo = [r for r in recent if rescan or not seen_ok(seen, r, all_branches)]
     result["unchanged"] = len(recent) - len(todo)
-    for r in todo[:max_repos]:
-        if r.get("size", 0) > 200_000:   # KB; very large repositories are skipped to keep the check quick
-            result["notes"].append(f"{r['full_name']}: skipped (larger than 200 MB)")
-            continue
-        branch = r.get("default_branch") or "HEAD"
-        tmp = tempfile.mkdtemp(prefix="polinrider-gh-")
-        try:
-            blob = client.get(f"/repos/{r['full_name']}/tarball/{branch}", binary=True, limit=MAX_ARCHIVE)
-            safe_extract(blob, tmp)
-            s = cr.Scan(tmp)
-            s.walk()
-            result["scanned"].append(r["full_name"])
-            if s.findings:
-                seen.pop(r["full_name"], None)        # keep re-checking until it's clean
+    done = 0
+    try:
+        for r in todo[:max_repos]:
+            name = r["full_name"]
+            branches = [r.get("default_branch") or "HEAD"]
+            if all_branches:
+                try:
+                    branches = [b["name"] for b in client.get_all(f"/repos/{name}/branches")] or branches
+                except RateLimited:
+                    raise
+                except RuntimeError as e:
+                    result["notes"].append(f"{name}: could not list branches ({e}), scanning the default branch only")
+            outcomes = set()
+            for branch in branches:
+                outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not r.get("size")))
+                result["branches_scanned"] += 1
+            if outcomes != {"error"}:
+                result["scanned"].append(name)
+            if outcomes <= {"clean", "empty"}:
+                seen[name] = r["pushed_at"] + ("|all" if all_branches else "")
             else:
-                seen[r["full_name"]] = r["pushed_at"]
-            for sev, rule, rel, detail in s.findings:
-                result["findings"].append([sev, f"{r['full_name']} ({branch})", f"{rel} - {detail}"])
-        except RuntimeError as e:
-            result["notes"].append(f"{r['full_name']}: not scanned ({e})")
-        except (tarfile.TarError, OSError) as e:
-            result["notes"].append(f"{r['full_name']}: not scanned ({e.__class__.__name__})")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-    save_seen(seen)
-    if len(todo) > max_repos:
-        result["notes"].append(f"{len(todo) - max_repos} more recently pushed repositories will be scanned next time (limit {max_repos} per run)")
+                seen.pop(name, None)                      # keep re-checking until it's clean
+            done += 1
+    except RateLimited as e:
+        result["notes"].append(f"stopped early: {e}")
+    finally:
+        save_seen(seen)
+    for path in client.truncated:
+        result["notes"].append(f"only the first {MAX_PAGES * PER_PAGE} items of {path.split('?')[0]} were checked")
+    if len(todo) > done:
+        result["notes"].append(f"{len(todo) - done} more recently pushed repositories will be scanned next time"
+                               + (f" (limit {max_repos} per run)" if done == max_repos else ""))
     return result
+
+
+def positive_int(argv, flag, default):
+    if flag not in argv:
+        return default
+    i = argv.index(flag) + 1
+    if i >= len(argv) or not argv[i].isdigit() or int(argv[i]) < 1:
+        raise ValueError(f"{flag} needs a whole number of 1 or more")
+    return int(argv[i])
 
 
 def main(argv):
@@ -200,10 +424,14 @@ def main(argv):
     if not user.replace("-", "").isalnum() or len(user) > 39:
         print(f"github_check: '{user}' is not a valid GitHub username", file=sys.stderr)
         return 3
-    days = int(argv[argv.index("--days") + 1]) if "--days" in argv else 7
-    max_repos = int(argv[argv.index("--max-repos") + 1]) if "--max-repos" in argv else 15
     try:
-        res = check(user, days, max_repos, "--rescan" in argv)
+        days = positive_int(argv, "--days", 7)
+        max_repos = positive_int(argv, "--max-repos", 15)
+    except ValueError as e:
+        print(f"github_check: {e}", file=sys.stderr)
+        return 3
+    try:
+        res = check(user, days, max_repos, "--rescan" in argv, "--all-branches" in argv)
     except (RuntimeError, ValueError) as e:
         if "--json" in argv:
             print(json.dumps({"user": user, "error": str(e)}))
@@ -218,6 +446,7 @@ def main(argv):
         return code
     print(f"GitHub account {user} ({'via gh, incl. private' if res['source'] == 'gh' else 'public repositories'}): "
           f"{res['repos']} repositories, {len(res['recent'])} pushed in the last {days} days, {len(res['scanned'])} scanned"
+          + (f" ({res['branches_scanned']} branches)" if "--all-branches" in argv else "")
           + (f", {res['unchanged']} unchanged since they were last scanned clean" if res.get("unchanged") else ""))
     for sev, where, detail in res["findings"]:
         print(f"  {'🛑' if sev == 'DANGER' else '⚠️ '} {where}: {detail}")
