@@ -23,6 +23,7 @@ IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 OS_NAME = "windows" if IS_WIN else "mac" if IS_MAC else "linux"
 
+# These three keep the project's original name on purpose: installs already on people's computers use them.
 ROUTINE_LABEL = "com.polinrider-survival-kit.daily-check"      # macOS launchd job (mac/install-routine.sh)
 ROUTINE_TASK = "polinrider-survival-kit daily check"           # Windows scheduled task (windows/install-routine.ps1)
 RC_MARKER = "# >>> polinrider-survival-kit >>>"                # block the installer adds to shell profiles

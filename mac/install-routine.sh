@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — schedule the daily check on macOS with launchd (runs every day at 09:00;
+# Ardvane — schedule the daily check on macOS with launchd (runs every day at 09:00;
 # if the Mac was asleep at that time it runs when it wakes — not if it was switched off). Also records
 # fingerprints of the kit's files so the check can tell you if malware tampers with them.
 #   bash install-routine.sh [HH:MM]        e.g.  bash install-routine.sh 8:30   (or: 8 30)

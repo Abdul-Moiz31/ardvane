@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — installer for macOS (also works on Linux).
+# Ardvane — installer for macOS (also works on Linux).
 #
 # Installs:
 #   ~/.checkrepo/checkrepo.py        the read-only malware scanner
@@ -34,7 +34,7 @@ run()  { if [ $DRY -eq 1 ]; then echo "  [dry-run] $*"; else "$@" || die "failed
 backup() { [ -f "$1" ] && [ ! -f "$1.bak-checkrepo" ] && cp "$1" "$1.bak-checkrepo"; return 0; }   # keep the FIRST original
 BEGIN="# >>> polinrider-survival-kit >>>"; END="# <<< polinrider-survival-kit <<<"
 
-echo "polinrider-survival-kit installer$([ $DRY -eq 1 ] && echo ' (dry run — nothing will change)')"
+echo "Ardvane installer$([ $DRY -eq 1 ] && echo ' (dry run — nothing will change)')"
 echo
 
 # ---------------------------------------------------------------- prerequisites

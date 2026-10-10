@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""autofix — fix what the kit can fix safely, with undo. Part of polinrider-survival-kit (MIT License).
+"""autofix — fix what the kit can fix safely, with undo. Part of Ardvane (MIT License).
 
 Python 3.8+, standard library only.
 

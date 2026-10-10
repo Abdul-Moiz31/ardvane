@@ -31,7 +31,7 @@ def _mac():
     os.makedirs(resources, exist_ok=True)
     # Try the Python that created the icon first, then the usual places (a Homebrew upgrade can move Python).
     candidates = " ".join(f'"{c}"' for c in [python_exe(), "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"])
-    script = (f"#!/bin/sh\n# Opens the {APP_NAME} dashboard (polinrider-survival-kit)\n"
+    script = (f"#!/bin/sh\n# Opens the {APP_NAME} dashboard (Ardvane)\n"
               f"for p in {candidates}; do\n"
               f"  if [ -x \"$p\" ]; then POLINRIDER_KIT=\"{KIT}\" \"$p\" \"{ENTRY}\" >/dev/null 2>&1 & exit 0; fi\n"
               "done\n"

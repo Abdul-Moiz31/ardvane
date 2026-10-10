@@ -1,4 +1,4 @@
-# polinrider-survival-kit - one-command, READ-ONLY scan of this Windows PC. BETA: not yet tested on real Windows.
+# Ardvane - one-command, READ-ONLY scan of this Windows PC. BETA: not yet tested on real Windows.
 # Nothing is installed, changed, deleted or run from your projects. No internet connection is needed.
 #
 #   powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1               scan your user folder
@@ -46,7 +46,7 @@ foreach ($c in 'py', 'python', 'python3') {
     Invoke-Native { & $cmd.Source @a -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" 2>$null | Out-Null }
     if ($LASTEXITCODE -eq 0) { $py = @{ Exe = $cmd.Source; Args = $a }; break }
 }
-Say "polinrider-survival-kit - machine scan  $(Get-Date -Format 'yyyy-MM-dd HH:mm') - read-only - Windows" 'White'
+Say "Ardvane - machine scan  $(Get-Date -Format 'yyyy-MM-dd HH:mm') - read-only - Windows" 'White'
 if (-not $py) { Say 'Python 3.8+ not found - project and package scans will be skipped (https://www.python.org/downloads/)' 'Yellow' }
 
 # 1. known malware locations

@@ -1,4 +1,4 @@
-# polinrider-survival-kit - uninstaller for Windows (BETA). Reverses install.ps1 and install-routine.ps1.
+# Ardvane - uninstaller for Windows (BETA). Reverses install.ps1 and install-routine.ps1.
 # Leaves npm ignore-scripts and editor settings in place (good defaults); how to revert them is printed at the end.
 #   powershell -ExecutionPolicy Bypass -File .\windows\uninstall.ps1
 

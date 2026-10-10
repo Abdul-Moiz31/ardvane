@@ -6,7 +6,7 @@ If you find a way to make the kit itself unsafe — for example a way for a scan
 execute code, a bypass of the git hooks or safe clone, or anything in the installers that could damage a user's
 system — **please report it privately**:
 
-- Use GitHub's **[Report a vulnerability](https://github.com/Abdul-Moiz31/polinrider-survival-kit/security/advisories/new)** button (Security tab → Advisories), or
+- Use GitHub's **[Report a vulnerability](https://github.com/Abdul-Moiz31/ardvane/security/advisories/new)** button (Security tab → Advisories), or
 - open a minimal public issue saying "security report — please enable a private channel" without details.
 
 Please include what you did, what happened, and the operating system / Python version. I'll acknowledge reports as

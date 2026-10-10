@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — one-command, READ-ONLY scan of this computer (macOS / Linux).
+# Ardvane — one-command, READ-ONLY scan of this computer (macOS / Linux).
 # Nothing is installed, changed, deleted or run from your projects. No internet connection is needed.
 #
 #   bash scan-my-machine.sh            scan your home folder (projects up to 6 folders deep)
@@ -44,7 +44,7 @@ for c in python3 python; do
   command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1 && { PY="$c"; break; }
 done
 
-say "${B}polinrider-survival-kit — machine scan${X}  ${D}$(date '+%Y-%m-%d %H:%M') · read-only · $OS${X}"
+say "${B}Ardvane — machine scan${X}  ${D}$(date '+%Y-%m-%d %H:%M') · read-only · $OS${X}"
 [ -n "$PY" ] || say "${Y}Python 3.8+ not found — project and package scans will be skipped (macOS: xcode-select --install)${X}"
 
 # ------------------------------------------------------------------ 1. known malware locations

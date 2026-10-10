@@ -1,4 +1,4 @@
-# polinrider-survival-kit - installer for Windows (BETA: written carefully but not yet tested on real Windows;
+# Ardvane - installer for Windows (BETA: written carefully but not yet tested on real Windows;
 # please report results in the repository's issues).
 #
 # Run from PowerShell in the repository folder:
@@ -37,7 +37,7 @@ function Set-Block($path, $block, [switch]$Lf) {
     [IO.File]::WriteAllText($path, $text.TrimStart(), $Utf8NoBom)     # no BOM: a BOM breaks Git Bash's .bashrc
 }
 
-Write-Host "polinrider-survival-kit installer for Windows (beta)$(if ($DryRun) {' - dry run, nothing will change'})`n"
+Write-Host "Ardvane installer for Windows (beta)$(if ($DryRun) {' - dry run, nothing will change'})`n"
 
 # ---------------------------------------------------------------- prerequisites
 $git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1

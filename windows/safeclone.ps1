@@ -1,4 +1,4 @@
-# polinrider-survival-kit - safe clone for Windows PowerShell (BETA: not yet tested on real Windows).
+# Ardvane - safe clone for Windows PowerShell (BETA: not yet tested on real Windows).
 # Clones WITHOUT writing project files, scans a private copy, and only writes the files if clean.
 # If malware is found, no project files are written and the download goes to the Recycle Bin.
 # Called by the `git` function the installer adds to your PowerShell profile:

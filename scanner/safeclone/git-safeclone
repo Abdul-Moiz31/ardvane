@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — safe clone (macOS / Linux / Git Bash).
+# Ardvane — safe clone (macOS / Linux / Git Bash).
 # Clones WITHOUT writing project files, scans a private copy, and only writes the files if clean.
 # If malware is found, no project files are written and the download is moved to the Trash (macOS)
 # or to ~/.checkrepo/quarantine.

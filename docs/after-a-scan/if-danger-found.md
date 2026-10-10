@@ -43,7 +43,7 @@ The worm spreads through collaborators. Send a short message to every person or 
 
 > My GitHub account was compromised by the PolinRider malware. It may have force-pushed malware into your repos
 > from my account around <time>. Please don't open those repos in VS Code/Cursor or run npm install, revert/clean
-> my recent commits, and check your own machine with https://github.com/Abdul-Moiz31/polinrider-survival-kit
+> my recent commits, and check your own machine with https://github.com/Abdul-Moiz31/ardvane
 
 If a **collaborator's** commit brought the malware to you, ask them to check their machine before they push again.
 
