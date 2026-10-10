@@ -208,6 +208,30 @@ class FolderPicker(unittest.TestCase):
         self.assertEqual(self.pick(0, "/definitely/not/a/folder"), {"cancelled": True})
 
 
+class Commands(unittest.TestCase):
+    """The `ardvane` command line and the shared command builders."""
+
+    def test_version_help_and_unknown(self):
+        from backend import cli
+        self.assertEqual(cli.main(["--version"]), 0)
+        self.assertEqual(cli.main(["--help"]), 0)
+        self.assertEqual(cli.main(["definitely-not-a-command"]), 3)
+        self.assertTrue({"scan", "check", "protect", "unprotect", "fixes", "launcher"} <= set(cli.COMMANDS))
+
+    def test_command_builders(self):
+        from backend import actions
+        self.assertIn("--quick" if os.name != "nt" else "-Quick", actions.scan_command(True, ["/x"]))
+        self.assertEqual(actions.scan_command(False, ["/x"])[-1], "/x")
+        self.assertIn("--dry-run" if os.name != "nt" else "-DryRun", actions.installer_command("install", True))
+        self.assertNotIn("--dry-run", actions.installer_command("uninstall", True))
+        with self.assertRaises(ValueError):
+            actions.installer_command("format-disk")
+
+    def test_check_command_runs_the_scanner(self):
+        from backend import cli
+        self.assertEqual(cli.main(["check", SANDBOX]), 0)
+
+
 class Docs(unittest.TestCase):
     def test_only_listed_guides_can_be_read(self):
         listed = docs.list_all()

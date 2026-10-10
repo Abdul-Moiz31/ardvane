@@ -7,21 +7,32 @@ import shutil
 import threading
 
 from .config import HOME, IS_MAC, IS_WIN, KIT
-from .system import powershell, run
+from .system import powershell, powershell_command, run
 
 _picker_lock = threading.Lock()
 PICKER_PROMPT = "Choose a folder with your projects"
 
 
-def installer(action, dry_run=False):
-    """action: 'install' or 'uninstall'. Returns (exit code, output)."""
+def scan_command(quick=False, folders=()):
+    """The one-command machine scan for this system (used by the dashboard and by `ardvane scan`)."""
+    if IS_WIN:
+        return powershell_command(os.path.join(KIT, "scan-my-machine.ps1"), *(["-Quick"] if quick else []), *folders)
+    return ["bash", os.path.join(KIT, "scan-my-machine.sh"), *(["--quick"] if quick else []), *folders]
+
+
+def installer_command(action, dry_run=False):
+    """action: 'install' or 'uninstall'; dry_run previews an install without changing anything."""
     if action not in ("install", "uninstall"):
         raise ValueError("bad action")
     preview = dry_run and action == "install"
     if IS_WIN:
-        script = os.path.join(KIT, "windows", action + ".ps1")
-        return powershell(script, *(["-DryRun"] if preview else []))
-    return run(["bash", os.path.join(KIT, "mac", action + ".sh")] + (["--dry-run"] if preview else []), timeout=600)
+        return powershell_command(os.path.join(KIT, "windows", action + ".ps1"), *(["-DryRun"] if preview else []))
+    return ["bash", os.path.join(KIT, "mac", action + ".sh"), *(["--dry-run"] if preview else [])]
+
+
+def installer(action, dry_run=False):
+    """Run the installer and capture its output (for the dashboard). Returns (exit code, output)."""
+    return run(installer_command(action, dry_run), timeout=600)
 
 
 def set_routine(on, at="09:00"):

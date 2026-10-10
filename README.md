@@ -43,19 +43,20 @@ everything that finally worked, packaged so you don't lose the weeks I did. → 
 
 ## 🚀 Get started
 
-You need **git** and **Python 3.8+**. On a Mac, run `xcode-select --install` if you don't have them. Nothing else gets installed.
+**1. Install** with one command:
+
+| | |
+|---|---|
+| **macOS** (Homebrew) | `brew install abdul-moiz31/ardvane/ardvane` |
+| **macOS, Linux, Windows** (Python 3.8+) | `pipx install ardvane` |
+
+No pipx yet? `brew install pipx` on a Mac, `py -m pip install --user pipx` on Windows, or use
+`python3 -m pip install --user ardvane` instead.
+
+**2. Open Ardvane:**
 
 ```bash
-git clone https://github.com/Abdul-Moiz31/ardvane.git
-cd ardvane
-```
-
-No git? Click **Code → Download ZIP** and unzip it.
-
-### Option 1 — the Ardvane app (recommended)
-
-```bash
-python3 app/dashboard.py          # Windows: py -3 app\dashboard.py
+ardvane
 ```
 
 The dashboard opens in your browser and runs **only on your computer**. Press **Scan now**, then:
@@ -66,16 +67,33 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 
 → [Dashboard guide](docs/dashboard.md)
 
-### Option 2 — the terminal
+**Prefer the terminal?**
 
-| | macOS / Linux | Windows 🧪 *beta* |
-|---|---|---|
-| **Am I infected?** (read-only scan) | `bash scan-my-machine.sh` | `powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1` |
-| **Turn on protection** | `bash mac/install.sh` (preview: `--dry-run`) | `powershell -ExecutionPolicy Bypass -File .\windows\install.ps1` (preview: `-DryRun`) |
-| **Daily check** | `bash mac/install-routine.sh 9:00` | `powershell -ExecutionPolicy Bypass -File .\windows\install-routine.ps1 -At 09:00` |
-| **Undo everything** | `bash mac/uninstall.sh` | `powershell -ExecutionPolicy Bypass -File .\windows\uninstall.ps1` |
+| Command | What it does |
+|---|---|
+| `ardvane scan` | Read-only scan of this computer and your projects (`--quick` for machine checks only) |
+| `ardvane check <folder>` | Scan one folder before you open it: a download, a coding test, a colleague's repo |
+| `ardvane protect` | Turn on protection (`--dry-run` shows every change first) |
+| `ardvane unprotect` | Remove protection and restore your previous settings |
+| `ardvane fixes` | What Ardvane can fix for you, with undo |
+| `ardvane --help` | Everything else |
 
 The scan ends with ✅ **CLEAN**, ⚠️ **worth a look** or 🛑 **INFECTED**, says exactly what to do next, and saves a report.
+Update with `brew upgrade ardvane` or `pipx upgrade ardvane`.
+
+<details>
+<summary>Run from source instead (contributors, or no Homebrew / pipx)</summary>
+
+```bash
+git clone https://github.com/Abdul-Moiz31/ardvane.git
+cd ardvane
+python3 app/dashboard.py            # = `ardvane`; add a command, e.g. python3 app/dashboard.py scan
+```
+
+The scripts also work on their own: `bash scan-my-machine.sh`, `bash mac/install.sh`, `bash mac/install-routine.sh 9:00`,
+and on Windows (beta) the matching `.ps1` files in `windows/`.
+
+</details>
 
 <a id="what-it-does"></a>
 
@@ -132,7 +150,7 @@ The scanner was built from **real malware files** taken from an actual infection
 | Same files with every known marker switched off (behaviour rules only) | **71 / 71 detected** |
 | 18 popular open-source projects, 106,225 files (Font-Awesome, Babel, Webpack, Prettier, javascript-obfuscator…) | **0 false alarms** |
 | A developer's 14 real projects + all installed packages, ~240,000 files | **0 false alarms** · 1 real infection leftover found |
-| Automated tests: scanner, fixer (incl. attempts to trick it), dashboard security, GitHub check | **94 tests**, run on macOS, Linux and Windows on every change |
+| Automated tests: scanner, fixer (incl. attempts to trick it), dashboard security, GitHub check | **97 tests**, run on macOS, Linux and Windows on every change, plus a build-and-install test of the package |
 
 **Honest limits:** Ardvane targets this family of attacks, so a completely new technique may not be detected. That's
 why it also hardens your editor, npm, git and GitHub and checks every day. The Windows scripts are beta. A scan can't
@@ -142,7 +160,8 @@ prove a machine is clean after a backdoor has run; see the [recovery guide](docs
 
 ```
 ardvane/
-├── app/                        the Ardvane dashboard (Python standard library + plain JavaScript)
+├── app/                        the Ardvane dashboard and `ardvane` command (Python standard library + plain JavaScript)
+├── packaging/                  builds the PyPI package (standard library only)
 ├── scan-my-machine.sh / .ps1   one-command, read-only machine scan
 ├── scanner/                    detection and fixes: checkrepo, autofix, GitHub check, package lists, git hooks, safe clone, tests
 ├── mac/                        install / uninstall / daily check for macOS and Linux
