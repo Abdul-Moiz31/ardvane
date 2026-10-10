@@ -4,7 +4,7 @@
 
 ## Checklist
 
-- [ ] `python3 3-checkrepo/tests/run_tests.py` passes
+- [ ] `python3 scanner/tests/run_tests.py` passes
 - [ ] New or changed detection rules have a **must-catch** and a **must-stay-quiet** test case (built at runtime — no real malware, marker strings assembled from pieces)
 - [ ] New indicators / packages link to a public report
 - [ ] `.ps1` files stay plain ASCII; shell scripts stay compatible with macOS's bash 3.2

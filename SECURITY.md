@@ -20,5 +20,5 @@ SHA-256 hash and a public reference instead.
 
 ## Scope
 
-- `3-checkrepo/` (scanner, hooks, safe clone, installers), `4-daily-routine/`, `5-infected-packages/`, `scan-my-machine.*`
+- `scanner/` (scanner, hooks, safe clone, package lists), `mac/` and `windows/` (installers, daily routine), `app/`, `scan-my-machine.*`
 - The guides are best-effort advice; corrections are welcome as normal issues.

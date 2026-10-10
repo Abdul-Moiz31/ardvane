@@ -22,8 +22,8 @@ SOFTWARE.
 
 ---
 
-Indicator lists in 5-infected-packages/ and parts of the detection indicators in
-3-checkrepo/checkrepo.py are derived from:
+Indicator lists in scanner/lists/ and parts of the detection indicators in
+scanner/checkrepo.py are derived from:
   - polinrider-cleaner (https://github.com/meSingh/polinrider-cleaner), MIT License
   - Bedri-B/polinrider (https://github.com/Bedri-B/polinrider), MIT License
 Copyright of those works remains with their respective authors.

@@ -11,8 +11,8 @@
 param([switch]$Quick, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Roots)
 
 $Kit = $PSScriptRoot
-$Checkrepo = Join-Path $Kit '3-checkrepo\checkrepo.py'
-$PkgCheck = Join-Path $Kit '5-infected-packages\check-my-projects.py'
+$Checkrepo = Join-Path $Kit 'scanner\checkrepo.py'
+$PkgCheck = Join-Path $Kit 'scanner\check-my-projects.py'
 if (-not $Roots) { $Roots = @($HOME) }
 $Report = Join-Path $Kit ("scan-report-" + (Get-Date -Format 'yyyy-MM-dd-HHmm') + ".txt")
 $lines = New-Object System.Collections.Generic.List[string]
@@ -161,11 +161,11 @@ Say ''
 if ($script:danger -gt 0) {
     Say "RESULT: INFECTED - $($script:danger) serious finding(s)." 'Red'
     Say 'Do NOT open the affected projects or run npm install in them. From another device if possible, follow:' 'Red'
-    Say "  $Kit\6-after-a-scan\if-danger-found.md   (cut off access first, then clean)"
+    Say "  $Kit\docs\after-a-scan\if-danger-found.md   (cut off access first, then clean)"
     $code = 1
 } elseif ($script:warn -gt 0) { Say "RESULT: no malware found - $($script:warn) item(s) worth a look (often harmless - read each line above)." 'Yellow'; $code = 2 }
 else { Say 'RESULT: CLEAN - no signs of this malware.' 'Green'; $code = 0 }
-Say 'Protect yourself from now on:  powershell -ExecutionPolicy Bypass -File .\3-checkrepo\windows\install.ps1'
+Say 'Protect yourself from now on:  powershell -ExecutionPolicy Bypass -File .\windows\install.ps1'
 [IO.File]::WriteAllLines($Report, $lines, (New-Object System.Text.UTF8Encoding $false))
 Say "Report saved: $Report" 'DarkGray'
 exit $code

@@ -1,0 +1,93 @@
+# Known-malicious npm packages (PolinRider / Contagious Interview)
+# Part of polinrider-survival-kit (MIT). One package name per line; lines starting with # are comments.
+# Last updated: 2026-10-10
+# Sources (credit to the researchers and maintainers who found these):
+#   - polinrider-cleaner ioc/bad-packages.txt (MIT) — https://github.com/meSingh/polinrider-cleaner
+#   - Bedri-B/polinrider (MIT) — https://github.com/Bedri-B/polinrider
+#   - OpenSourceMalware PolinRider dossier — https://github.com/OpenSourceMalware/PolinRider
+#   - OpenSourceMalware, "PolinRider Jumps the Fence to Go, Packagist, npm, PyPI" — https://opensourcemalware.com/blog/polinrider-jumps-the-fence
+# If you find one of these in your project: do NOT run it. See ../../docs/after-a-scan/if-danger-found.md
+@hoteldev/common
+@nasddatax/common
+@nasdtickets/common
+@rentwise/common
+@simplipayng/checkout
+@uw010010/vite-tree
+@vboxdev/common
+@vite-ln/build-ts
+@vite-mcp/vite-type
+@vite-pro/vite-ui
+@vite-tab/tab
+@vite-ts/vite-ui
+@vitets/vite-ts
+@wizloft/harness
+@wizloft/harness-context
+@wizloft/harness-kernel
+@wizloft/harness-plugin-repository-files
+@wizloft/harness-validation
+@zahlen/checkout-angular
+@zahlen/checkout-react
+anhn-cli
+bianira-ui
+changelog-logger-utilities
+devpack-conf
+envpack-conf
+fluid-type-ui
+iconova-react
+js-logger-pack
+jsonwebauth
+node-env-resolve
+pinno-loggers
+polymarket-validator
+post-css-transfer
+postcss-initial-provider
+postcss-initialize-plugin
+postcss-theme-provider
+pretty-logger-utils
+rate-limit-flexible
+rate-limits-flexible
+react-scroll-disable
+sass-formats
+scrollbar-hide-plugin
+simplipayng
+tailwind-animate-plugin
+tailwind-animationbased
+tailwind-animationgroup
+tailwind-animationpack
+tailwind-anime
+tailwind-autoanimation
+tailwind-contact-forms
+tailwind-custom-forms
+tailwind-custom-templates
+tailwind-form-styles
+tailwind-form-templates
+tailwind-forms-kit
+tailwind-forms-styles
+tailwind-hide-scrollbar
+tailwind-mainanimation
+tailwind-minanimated
+tailwind-modernanimation
+tailwind-opentype
+tailwind-scrollbar-styles
+tailwindcss-3d-animate
+tailwindcss-animate-style
+tailwindcss-animate-styles
+tailwindcss-animates-kit
+tailwindcss-animatics
+tailwindcss-contact-form
+tailwindcss-contact-forms
+tailwindcss-fluid-styles
+tailwindcss-form-ui
+tailwindcss-form-utils
+tailwindcss-forms-style
+tailwindcss-forms-styles
+tailwindcss-forms-ui
+tailwindcss-merge
+tailwindcss-motion-advanced
+tailwindcss-scrollbar-hide
+tailwindcss-style-animate
+tailwindcss-style-modify
+tailwindcss-typography-style
+terminal-logger-utils
+ts-logger-pack
+uibabai

@@ -11,8 +11,8 @@
 
 set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
-CHECKREPO="$KIT/3-checkrepo/checkrepo.py"
-PKGCHECK="$KIT/5-infected-packages/check-my-projects.py"
+CHECKREPO="$KIT/scanner/checkrepo.py"
+PKGCHECK="$KIT/scanner/check-my-projects.py"
 QUICK=0; ROOTS=()
 for a in "$@"; do case "$a" in
   --quick) QUICK=1 ;; -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -210,7 +210,7 @@ say ""
 if [ $danger -gt 0 ]; then
   say "${R}${B}RESULT: INFECTED — $danger serious finding(s).${X}"
   say "Do NOT open the affected projects or run npm install in them. From another device if possible, follow:"
-  say "  $KIT/6-after-a-scan/if-danger-found.md   (cut off access first, then clean)"
+  say "  $KIT/docs/after-a-scan/if-danger-found.md   (cut off access first, then clean)"
   code=1
 elif [ $warn -gt 0 ]; then
   say "${Y}${B}RESULT: no malware found — $warn item(s) worth a look (often harmless — read each line above).${X}"
@@ -219,6 +219,6 @@ else
   say "${G}${B}RESULT: CLEAN — no signs of this malware.${X}"
   code=0
 fi
-say "Protect yourself from now on (scans every clone/pull/push automatically):  bash 3-checkrepo/mac/install.sh"
+say "Protect yourself from now on (scans every clone/pull/push automatically):  bash mac/install.sh"
 say "${D}Report saved: $REPORT${X}"
 exit $code
