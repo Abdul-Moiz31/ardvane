@@ -15,10 +15,10 @@ body:
       label: What did you run?
       options:
         - label: scan-my-machine.ps1
-        - label: 3-checkrepo\windows\install.ps1
+        - label: windows\install.ps1
         - label: git clone / pull / push after installing (safe clone + hooks)
-        - label: 4-daily-routine\windows\install-routine.ps1
-        - label: 3-checkrepo\windows\uninstall.ps1
+        - label: windows\install-routine.ps1
+        - label: windows\uninstall.ps1
   - type: textarea
     id: result
     attributes:

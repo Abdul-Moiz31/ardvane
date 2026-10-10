@@ -1,7 +1,7 @@
 # Shell scripts and git hooks must keep LF line endings (also when cloned on Windows)
 *.sh                         text eol=lf
-3-checkrepo/hooks/dispatch   text eol=lf
-3-checkrepo/safeclone/git-safeclone text eol=lf
+scanner/hooks/dispatch   text eol=lf
+scanner/safeclone/git-safeclone text eol=lf
 *.py                         text eol=lf
 # PowerShell scripts: Windows line endings
 *.ps1                        text eol=crlf

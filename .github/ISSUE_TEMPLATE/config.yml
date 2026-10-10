@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/Abdul-Moiz31/polinrider-survival-kit/security/advisories/new
     about: Please report vulnerabilities privately.
   - name: I think I'm infected
-    url: https://github.com/Abdul-Moiz31/polinrider-survival-kit/blob/main/6-after-a-scan/if-danger-found.md
+    url: https://github.com/Abdul-Moiz31/polinrider-survival-kit/blob/main/docs/after-a-scan/if-danger-found.md
     about: Follow the step-by-step guide first — the order matters.

@@ -6,22 +6,33 @@
 #   powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1 C:\code D:\work   scan these folders for projects
 #
 # Exit code: 0 clean, 1 malware evidence found, 2 only items worth a look.
-# A copy of the report is saved next to this script as scan-report-YYYY-MM-DD-HHMM.txt
+# A copy of the report is saved as scan-report-YYYY-MM-DD-HHMM.txt next to this script
+# (or in %USERPROFILE%\.checkrepo\reports\scans if this folder isn't writable, or in $env:SCAN_REPORT_DIR).
+# For the dashboard: if $env:SCAN_EVENTS names a file, every result is also appended to it as
+# tab-separated lines: TYPE <tab> message <tab> path  (TYPE: H section, D danger, W check, O ok, I info, P progress, R result)
 
 param([switch]$Quick, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Roots)
 
 $Kit = $PSScriptRoot
-$Checkrepo = Join-Path $Kit '3-checkrepo\checkrepo.py'
-$PkgCheck = Join-Path $Kit '5-infected-packages\check-my-projects.py'
+$Checkrepo = Join-Path $Kit 'scanner\checkrepo.py'
+$PkgCheck = Join-Path $Kit 'scanner\check-my-projects.py'
 if (-not $Roots) { $Roots = @($HOME) }
-$Report = Join-Path $Kit ("scan-report-" + (Get-Date -Format 'yyyy-MM-dd-HHmm') + ".txt")
+$ReportDir = if ($env:SCAN_REPORT_DIR) { $env:SCAN_REPORT_DIR } else { $Kit }
+try { $probe = Join-Path $ReportDir '.write-test'; [IO.File]::WriteAllText($probe, ''); Remove-Item $probe -ErrorAction SilentlyContinue }
+catch { $ReportDir = Join-Path $HOME '.checkrepo\reports\scans' }
+New-Item -ItemType Directory -Force -Path $ReportDir -ErrorAction SilentlyContinue | Out-Null
+$Report = Join-Path $ReportDir ("scan-report-" + (Get-Date -Format 'yyyy-MM-dd-HHmm') + ".txt")
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $lines = New-Object System.Collections.Generic.List[string]
 $script:danger = 0; $script:warn = 0
 function Say($m, $c = 'Gray') { Write-Host $m -ForegroundColor $c; $lines.Add($m) }
-function Bad($m) { $script:danger++; Say "  [DANGER] $m" 'Red' }
-function Chk($m) { $script:warn++; Say "  [CHECK]  $m" 'Yellow' }
-function Okay($m) { Say "  [OK]     $m" 'Green' }
-function Head1($m) { Say ''; Say $m 'White' }
+# machine-readable copy for the dashboard (no-op unless $env:SCAN_EVENTS is set)
+function Ev($t, $m, $p = '') { if ($env:SCAN_EVENTS) { [IO.File]::AppendAllText($env:SCAN_EVENTS, "$t`t$(($m -replace "[`t`r`n]", ' '))`t$p`n", $Utf8NoBom) } }
+function Bad($m, $p = '') { $script:danger++; Say "  [DANGER] $m" 'Red'; Ev 'D' $m $p }
+function Chk($m, $p = '') { $script:warn++; Say "  [CHECK]  $m" 'Yellow'; Ev 'W' $m $p }
+function Okay($m) { Say "  [OK]     $m" 'Green'; Ev 'O' $m }
+function Info($m) { Say "  $m" 'DarkGray'; Ev 'I' $m }
+function Head1($m) { Say ''; Say $m 'White'; Ev 'H' $m }
 function Invoke-Native([scriptblock]$Block) {
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { & $Block } finally { $ErrorActionPreference = $old }
@@ -42,10 +53,10 @@ if (-not $py) { Say 'Python 3.8+ not found - project and package scans will be s
 Head1 '1. Known malware locations'; $n = $script:danger
 foreach ($p in @("$env:LOCALAPPDATA\MicrosoftSystem64", "$env:LOCALAPPDATA\MicrosoftSystem64.exe", "$env:LOCALAPPDATA\Temp\tmp7A863DD1.tmp",
                  "$HOME\.node_modules", "$HOME\.n2", "$HOME\.n3", "$HOME\.npl", "$HOME\.pyp", "$HOME\.sysinfo", "$HOME\.pcl-data", "$HOME\.pcl-state")) {
-    if (Test-Path $p) { Bad "found: $p" }
+    if (Test-Path $p) { Bad "found: $p" $p }
 }
 Get-ChildItem "$env:TEMP", "$env:APPDATA", "$env:LOCALAPPDATA" -Include 'SvcHostUpdate.py','SvcHostUpdate.js','MicrosoftCLROptimization.vbs','MicrosoftSystem64*' -Recurse -Depth 2 -ErrorAction SilentlyContinue |
-    ForEach-Object { Bad "found: $($_.FullName)" }
+    ForEach-Object { Bad "found: $($_.FullName)" $_.FullName }
 if ($script:danger -eq $n) { Okay 'none' }
 
 # 2. processes
@@ -66,8 +77,8 @@ Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskPath -no
 }
 foreach ($dir in @([Environment]::GetFolderPath('Startup'))) {
     Get-ChildItem $dir -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -match 'MicrosoftCLROptimization|MicrosoftSystem64') { Bad "startup folder: $($_.FullName)" }
-        elseif ($_.Extension -in '.vbs', '.js', '.bat', '.cmd', '.ps1') { Chk "startup folder script - check you recognise it: $($_.FullName)" }
+        if ($_.Name -match 'MicrosoftCLROptimization|MicrosoftSystem64') { Bad "startup folder: $($_.FullName)" $_.FullName }
+        elseif ($_.Extension -in '.vbs', '.js', '.bat', '.cmd', '.ps1') { Chk "startup folder script - check you recognise it: $($_.FullName)" $_.FullName }
     }
 }
 foreach ($k in 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce') {
@@ -84,8 +95,8 @@ Head1 '4. PowerShell profile and hosts file'; $n = $script:danger; $nw = $script
 foreach ($f in @($PROFILE, (Join-Path $HOME '.bashrc'))) {
     if (-not (Test-Path $f)) { continue }
     $txt = [IO.File]::ReadAllText($f)
-    if ($txt -match 'MicrosoftSystem64|SvcHostUpdate|tg14xq') { Bad "malware reference in $f" }
-    elseif ($txt -match 'iwr[^|#\r\n]*\|\s*iex|Invoke-WebRequest[^|#\r\n]*\|\s*Invoke-Expression|FromBase64String|curl[^|#\r\n]*\|\s*(ba)?sh') { Chk "$f runs downloaded/encoded code - check you added it" }
+    if ($txt -match 'MicrosoftSystem64|SvcHostUpdate|tg14xq') { Bad "malware reference in $f" $f }
+    elseif ($txt -match 'iwr[^|#\r\n]*\|\s*iex|Invoke-WebRequest[^|#\r\n]*\|\s*Invoke-Expression|FromBase64String|curl[^|#\r\n]*\|\s*(ba)?sh') { Chk "$f runs downloaded/encoded code - check you added it" $f }
 }
 $hosts = Get-Content "$env:SystemRoot\System32\drivers\etc\hosts" -ErrorAction SilentlyContinue | Where-Object { $_ -and $_ -notmatch '^\s*#' -and $_ -notmatch 'localhost' }
 if ($hosts) { Chk "hosts file has custom entries (fine if you added them): $(($hosts | Select-Object -First 3) -join ' | ')" }
@@ -110,41 +121,41 @@ foreach ($e in "$HOME\.vscode\extensions", "$HOME\.cursor\extensions", "$HOME\.w
     if (-not (Test-Path $e)) { continue }
     $all = @(Get-ChildItem $e -Directory -ErrorAction SilentlyContinue)
     $recent = ($all | Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-14) } | ForEach-Object { $_.Name }) -join ' '
-    Say "  $(Split-Path (Split-Path $e -Parent) -Leaf) extensions: $($all.Count) installed$(if ($recent) { "; added/updated in the last 14 days: $recent" })" 'DarkGray'
+    Info "$(Split-Path (Split-Path $e -Parent) -Leaf) extensions: $($all.Count) installed$(if ($recent) { "; added/updated in the last 14 days: $recent" })"
 }
 if ($script:danger -eq $n -and $script:warn -eq $nw) { Okay 'safe settings' }
 
 # 7. projects
 Head1 '7. Your projects (every git repository + loose downloads)'
-if ($Quick -or -not $py) { Say '  skipped' 'DarkGray' } else {
+if ($Quick -or -not $py) { Info 'skipped' } else {
     $dn = $script:danger; $wn = $script:warn
     $repos = @(Get-ChildItem $Roots -Directory -Recurse -Depth 6 -Force -Filter '.git' -ErrorAction SilentlyContinue |
                Where-Object { $_.FullName -notmatch '\\(node_modules|AppData|\.cache|\.npm|\.cargo|\.rustup|\.gradle|\.m2)\\' })
     $i = 0
     foreach ($g in $repos) {
         $i++; $d = $g.Parent.FullName
-        Write-Progress -Activity 'Scanning projects' -Status $d -PercentComplete ([int](100 * $i / [Math]::Max(1, $repos.Count)))
+        Write-Progress -Activity 'Scanning projects' -Status $d -PercentComplete ([int](100 * $i / [Math]::Max(1, $repos.Count))); Ev 'P' "$i $d"
         $json = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --json $d 2>$null }
         $res = $null; try { $res = $json | ConvertFrom-Json } catch { }
         if (-not $res) { continue }
         $detail = ($res.findings | Select-Object -First 3 | ForEach-Object { "$($_[2]): $($_[3])" }) -join '; '
-        if ($res.exit -eq 1) { Bad "INFECTED: $d - $detail" } elseif ($res.exit -eq 2) { Chk "worth a look: $d - $detail" }
+        if ($res.exit -eq 1) { Bad "INFECTED: $d - $detail" $d } elseif ($res.exit -eq 2) { Chk "worth a look: $d - $detail" $d }
     }
     Write-Progress -Activity 'Scanning projects' -Completed
     foreach ($dl in "$HOME\Downloads", "$HOME\Desktop") {
         if (-not (Test-Path $dl)) { continue }
         $json = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --json $dl 2>$null }
         $res = $null; try { $res = $json | ConvertFrom-Json } catch { }
-        if ($res -and $res.exit -eq 1) { Bad "INFECTED files in ${dl}" } elseif ($res -and $res.exit -eq 2) { Chk "worth a look in ${dl}" }
+        if ($res -and $res.exit -eq 1) { Bad "INFECTED files in ${dl}" $dl } elseif ($res -and $res.exit -eq 2) { Chk "worth a look in ${dl}" $dl }
     }
     if ($repos.Count -eq 0) { Chk 'found 0 git repositories - if your projects live elsewhere, run: .\scan-my-machine.ps1 D:\path\to\projects' }
     elseif ($script:danger -eq $dn -and $script:warn -eq $wn) { Okay "$($repos.Count) repositories + Downloads/Desktop scanned - no malware" }
-    else { Say "  $($repos.Count) repositories scanned" 'DarkGray' }
+    else { Info "$($repos.Count) repositories scanned" }
 }
 
 # 8. packages
 Head1 '8. Known malicious packages (npm / PyPI / Packagist, incl. global installs)'
-if ($Quick -or -not $py) { Say '  skipped' 'DarkGray' } else {
+if ($Quick -or -not $py) { Info 'skipped' } else {
     $out = Invoke-Native { & $py.Exe @($py.Args) $PkgCheck @Roots 2>$null }
     if ($LASTEXITCODE -eq 1) { $out | Where-Object { $_ -match '\[(npm|pypi|packagist)\]' } | ForEach-Object { Bad "malicious package: $($_.Trim())" } }
     else { Okay 'none of the known-malicious packages are used or installed' }
@@ -152,20 +163,21 @@ if ($Quick -or -not $py) { Say '  skipped' 'DarkGray' } else {
 
 # 9. protections
 Head1 '9. Built-in protections'
-try { $mp = Get-MpComputerStatus -ErrorAction Stop; if ($mp.RealTimeProtectionEnabled) { Okay 'Microsoft Defender real-time protection on' } else { Chk 'Microsoft Defender real-time protection is OFF' } } catch { Say '  (Defender status not available)' 'DarkGray' }
+try { $mp = Get-MpComputerStatus -ErrorAction Stop; if ($mp.RealTimeProtectionEnabled) { Okay 'Microsoft Defender real-time protection on' } else { Chk 'Microsoft Defender real-time protection is OFF' } } catch { Info '(Defender status not available)' }
 if ((Get-Command npm -ErrorAction SilentlyContinue) -and ((Invoke-Native { npm config get ignore-scripts }) -eq 'true')) { Okay 'npm install scripts blocked' }
-else { Say "  npm install scripts are allowed (the kit's installer blocks them)" 'DarkGray' }
+else { Info "npm install scripts are allowed (the kit's installer blocks them)" }
 
 # verdict
 Say ''
 if ($script:danger -gt 0) {
     Say "RESULT: INFECTED - $($script:danger) serious finding(s)." 'Red'
     Say 'Do NOT open the affected projects or run npm install in them. From another device if possible, follow:' 'Red'
-    Say "  $Kit\6-after-a-scan\if-danger-found.md   (cut off access first, then clean)"
+    Say "  $Kit\docs\after-a-scan\if-danger-found.md   (cut off access first, then clean)"
     $code = 1
 } elseif ($script:warn -gt 0) { Say "RESULT: no malware found - $($script:warn) item(s) worth a look (often harmless - read each line above)." 'Yellow'; $code = 2 }
 else { Say 'RESULT: CLEAN - no signs of this malware.' 'Green'; $code = 0 }
-Say 'Protect yourself from now on:  powershell -ExecutionPolicy Bypass -File .\3-checkrepo\windows\install.ps1'
-[IO.File]::WriteAllLines($Report, $lines, (New-Object System.Text.UTF8Encoding $false))
+Say 'Protect yourself from now on:  powershell -ExecutionPolicy Bypass -File .\windows\install.ps1'
+[IO.File]::WriteAllLines($Report, $lines, $Utf8NoBom)
 Say "Report saved: $Report" 'DarkGray'
+Ev 'R' "$code" $Report
 exit $code

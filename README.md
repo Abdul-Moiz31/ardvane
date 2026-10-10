@@ -16,7 +16,7 @@ Scan your machine in one command · block infected clones and pushes automatical
 [Stay protected](#-step-2--stay-protected) ·
 [How it works](#-how-it-works) ·
 [Accuracy](#-accuracy) ·
-[If you're infected](6-after-a-scan/if-danger-found.md) ·
+[If you're infected](docs/after-a-scan/if-danger-found.md) ·
 [Contributing](CONTRIBUTING.md)
 
 </div>
@@ -32,14 +32,17 @@ tests, fake npm packages, malicious editor extensions — and, once inside, a wo
 I was hit **three times in five weeks**. A clean reinstall of my Mac lasted three days. Deleting the malicious files,
 rewriting history and revoking tokens didn't stop it, because it kept coming back through infected repositories and
 collaborators. This kit is everything that finally worked, packaged so you don't lose the weeks I did.
-→ [Read the full story](1-my-story)
+→ [Read the full story](docs/story)
 
-> 🛑 **Think you're infected right now?** Go to [`6-after-a-scan/if-danger-found.md`](6-after-a-scan/if-danger-found.md) — the order of the steps matters.
+> 🛑 **Think you're infected right now?** Go to [`docs/after-a-scan/if-danger-found.md`](docs/after-a-scan/if-danger-found.md) — the order of the steps matters.
 
 ## ✨ Features
 
 | | |
 |---|---|
+| 🖥️ **Ardvane dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
+| 🔧 **Fixes, with undo** | The app can fix what's safe to fix: editor and npm settings, switched-off protection, malware in known locations (moved to quarantine, never deleted). Ask-first by default, or fully automatic |
+| ✅ **To-do list** | Every finding becomes a checklist of practical steps; a DANGER opens the recovery checklist; fixes are re-checked by the next scan; weekly GitHub-account checks come back on schedule |
 | 🔍 **One-command machine scan** | Read-only check of your whole computer: implants, running malware, startup items, attacker connections, editor settings, every git project and known malicious packages |
 | 🧱 **Safe clone** | `git clone` downloads without writing project files, scans, and **blocks** infected repositories |
 | 🚫 **Push guard** | `git push` is blocked if your repository contains malware, so you can't spread it to others |
@@ -97,22 +100,32 @@ The scan ends with ✅ **CLEAN**, ⚠️ **worth a look** or 🛑 **INFECTED** �
 **macOS / Linux**
 
 ```bash
-bash 3-checkrepo/mac/install.sh --dry-run     # preview every change
-bash 3-checkrepo/mac/install.sh               # scanner + git hooks + safe clone + npm/editor hardening
-bash 4-daily-routine/mac/install-routine.sh   # optional: daily check at 09:00
+bash mac/install.sh --dry-run     # preview every change
+bash mac/install.sh               # scanner + git hooks + safe clone + npm/editor hardening
+bash mac/install-routine.sh       # optional: daily check at 09:00
 ```
 
 **Windows** 🧪 *beta*
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\3-checkrepo\windows\install.ps1 -DryRun
-powershell -ExecutionPolicy Bypass -File .\3-checkrepo\windows\install.ps1
-powershell -ExecutionPolicy Bypass -File .\4-daily-routine\windows\install-routine.ps1
+powershell -ExecutionPolicy Bypass -File .\windows\install.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File .\windows\install.ps1
+powershell -ExecutionPolicy Bypass -File .\windows\install-routine.ps1
 ```
 
-Open a new terminal and run `checkrepo --version`. Undo everything any time with `3-checkrepo/mac/uninstall.sh`
+Open a new terminal and run `checkrepo --version`. Undo everything any time with `mac/uninstall.sh`
 (or `uninstall.ps1`). The installer backs up every file it edits, never replaces an existing git hooks setup without
 asking, and is safe to run again.
+
+### Prefer a window to the terminal? Use Ardvane
+
+```bash
+python3 app/dashboard.py
+```
+
+**Ardvane**, the kit's dashboard, opens in your browser and runs **only on your computer**. It can scan, turn protection on, schedule the
+daily check at the time you choose, and add an app icon so you never need the terminal again.
+→ [Dashboard guide](docs/dashboard.md)
 
 ## ⚙️ How it works
 
@@ -131,7 +144,7 @@ When everything is clean you won't notice it: a scan takes about **0.1–0.7 sec
 The scanner (`checkrepo`) is a single dependency-free Python file that **only reads files** — it runs git with
 `core.fsmonitor` and hooks disabled, so even a booby-trapped repository can't make it execute anything.
 It reports **DANGER** only for specific evidence of the campaign (which blocks clones and pushes) and **WARNING**
-for things that are unusual but can be legitimate (shown, never blocks). → [Full details](3-checkrepo)
+for things that are unusual but can be legitimate (shown, never blocks). → [Full details](docs/checkrepo.md)
 
 ## 📊 Accuracy
 
@@ -143,33 +156,36 @@ The scanner was built from **real malware files** taken from an actual infection
 | Same files with every known marker switched off — behaviour rules only | **71 / 71 detected** |
 | 18 popular open-source projects — 106,225 files (Font-Awesome, Babel, Webpack, Prettier, javascript-obfuscator, VS Code samples…) | **0 false alarms** |
 | A developer's 14 real projects + all installed packages — ~240,000 files | **0 false alarms** · 1 real infection leftover found |
-| Self-test suite, incl. a code-execution safety test ([`3-checkrepo/tests`](3-checkrepo/tests)) | **51 / 51**, run on macOS, Linux and Windows in CI |
+| Self-test suite, incl. a code-execution safety test ([`scanner/tests`](scanner/tests)) | **51 / 51**, run on macOS, Linux and Windows in CI |
 | Independent review — scripts tested in a sandbox; every finding fixed and covered by a test | ✅ |
 
 **Honest limits:** the kit targets this family of attacks — a completely new technique may not be detected, which is
 why it also hardens your editor, npm, git and GitHub and checks daily. The Windows scripts are beta: the scanner is
 tested on Windows in CI, the installers still need real-world reports. A scan can't prove a machine is clean after a
-backdoor has run — see the [recovery guide](6-after-a-scan/if-danger-found.md).
+backdoor has run — see the [recovery guide](docs/after-a-scan/if-danger-found.md).
 
 ## 📁 Repository structure
 
 ```
 polinrider-survival-kit/
 ├── scan-my-machine.sh / .ps1   one-command, read-only machine scan
-├── 1-my-story/                 how I was attacked three times, and what finally worked
-├── 2-attacks/                  each attack explained, with sources
-├── 3-checkrepo/                scanner, git hooks, safe clone, installers, tests
-├── 4-daily-routine/            scheduled morning check (launchd / Task Scheduler)
-├── 5-infected-packages/        known-malicious packages + project checker
-└── 6-after-a-scan/             incident response, GitHub cleanup, secrets, hardening
+├── app/                        the local dashboard (Python standard library + plain JavaScript)
+├── docs/                       every guide
+│   ├── story/                  how I was attacked three times, and what finally worked
+│   ├── attacks/                each attack explained, with sources
+│   ├── after-a-scan/           incident response, GitHub cleanup, secrets, hardening
+│   └── dashboard.md · checkrepo.md · daily-routine.md · infected-packages.md
+├── scanner/                    detection and fixes: checkrepo, autofix, GitHub check, package checker, lists, git hooks, safe clone, tests
+├── mac/                        install / uninstall / daily check for macOS and Linux
+└── windows/                    the same for Windows (beta)
 ```
 
 ## 📚 Learn more
 
-- [The attacks](2-attacks) — PolinRider worm, fake job interviews, BeaverTail / InvisibleFerret stealers, the MicrosoftSystem64
+- [The attacks](docs/attacks) — PolinRider worm, fake job interviews, BeaverTail / InvisibleFerret stealers, the MicrosoftSystem64
   backdoor, VS Code auto-run tasks, GlassWorm extensions, malicious npm packages, AI coding-agent attacks, ClickFix, EtherHiding
-- [If you're infected](6-after-a-scan/if-danger-found.md) · [Cleaning GitHub repositories](6-after-a-scan/clean-github-repos.md) ·
-  [Secrets rotation](6-after-a-scan/secrets-rotation-checklist.md) · [Hardening checklist](6-after-a-scan/hardening-checklist.md)
+- [If you're infected](docs/after-a-scan/if-danger-found.md) · [Cleaning GitHub repositories](docs/after-a-scan/clean-github-repos.md) ·
+  [Secrets rotation](docs/after-a-scan/secrets-rotation-checklist.md) · [Hardening checklist](docs/after-a-scan/hardening-checklist.md)
 
 ## 🤝 Contributing
 
@@ -187,7 +203,7 @@ This kit stands on the work of researchers and other victims who published their
 [Bedri-B/polinrider](https://github.com/Bedri-B/polinrider) (MIT) ·
 [pushwarden](https://github.com/FaheemRafiq/pushwarden) · [gitshield](https://github.com/mirzasaikatahmmed/gitshield) ·
 Palo Alto Networks Unit 42 · Google Threat Intelligence Group · JFrog Security Research · Socket · Elastic Security Labs ·
-Checkmarx · Cloud Security Alliance. Full source lists are at the end of every page in [`2-attacks`](2-attacks).
+Checkmarx · Cloud Security Alliance. Full source lists are at the end of every page in [`docs/attacks`](docs/attacks).
 
 ## ⚖️ License and disclaimer
 
