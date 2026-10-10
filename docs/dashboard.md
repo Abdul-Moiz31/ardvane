@@ -94,11 +94,17 @@ turned on, scans and the daily check also:
 - download the main branch of each recently pushed repository into a temporary folder, scan it with `checkrepo`, and
   delete it again. Nothing from GitHub is ever run.
 
+Every repository you can reach is listed, not only the first 100. There is no fixed size limit: a download holds only
+the latest files of one branch (much less than the repository size GitHub shows), is streamed to disk, and stops only
+if less than 2 GB of disk space would be left. Files over 20 MB (videos, models, datasets) are listed as not scanned.
+
 If the [GitHub CLI](https://cli.github.com) is installed and logged in (`gh auth login`), private repositories are
 included. Your token stays inside `gh`, and the kit never reads or stores it. Without `gh`, only public repositories
 are checked. Repositories that were already scanned clean are skipped until they get a new push.
 
-You can also run it on its own: `python3 scanner/github_check.py <username>`.
+You can also run it on its own: `python3 scanner/github_check.py <username>`. Add `--all-branches` to scan every
+branch (the worm pushes into all of them), `--days N` to look further back, and `--max-repos N` to scan more
+repositories in one run.
 
 ## Security design
 

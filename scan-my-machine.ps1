@@ -6,8 +6,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1 C:\code D:\work   scan these folders for projects
 #
 # Exit code: 0 clean, 1 malware evidence found, 2 only items worth a look.
-# A copy of the report is saved as scan-report-YYYY-MM-DD-HHMM.txt next to this script
-# (or in %USERPROFILE%\.checkrepo\reports\scans if this folder isn't writable, or in $env:SCAN_REPORT_DIR).
+# A copy of the report is saved as scan-report-YYYY-MM-DD-HHMM.txt in %USERPROFILE%\.checkrepo\reports\scans, where
+# the dashboard lists it (or in $env:SCAN_REPORT_DIR). Never inside the app's own folder, which upgrades replace.
 # For the dashboard: if $env:SCAN_EVENTS names a file, every result is also appended to it as
 # tab-separated lines: TYPE <tab> message <tab> path  (TYPE: H section, D danger, W check, O ok, I info, P progress, R result)
 
@@ -17,10 +17,11 @@ $Kit = $PSScriptRoot
 $Checkrepo = Join-Path $Kit 'scanner\checkrepo.py'
 $PkgCheck = Join-Path $Kit 'scanner\check-my-projects.py'
 if (-not $Roots) { $Roots = @($HOME) }
-$ReportDir = if ($env:SCAN_REPORT_DIR) { $env:SCAN_REPORT_DIR } else { $Kit }
-try { $probe = Join-Path $ReportDir '.write-test'; [IO.File]::WriteAllText($probe, ''); Remove-Item $probe -ErrorAction SilentlyContinue }
-catch { $ReportDir = Join-Path $HOME '.checkrepo\reports\scans' }
+$ReportDir = if ($env:SCAN_REPORT_DIR) { $env:SCAN_REPORT_DIR } else { Join-Path $HOME '.checkrepo\reports\scans' }
 New-Item -ItemType Directory -Force -Path $ReportDir -ErrorAction SilentlyContinue | Out-Null
+try { $probe = Join-Path $ReportDir '.write-test'; [IO.File]::WriteAllText($probe, ''); Remove-Item $probe -ErrorAction SilentlyContinue }
+catch { $ReportDir = [IO.Path]::GetTempPath() }
+$Protect = if ($env:ARDVANE_INSTALLED) { 'ardvane protect' } else { "powershell -ExecutionPolicy Bypass -File `"$Kit\windows\install.ps1`"" }
 $Report = Join-Path $ReportDir ("scan-report-" + (Get-Date -Format 'yyyy-MM-dd-HHmm') + ".txt")
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $lines = New-Object System.Collections.Generic.List[string]
@@ -176,7 +177,7 @@ if ($script:danger -gt 0) {
     $code = 1
 } elseif ($script:warn -gt 0) { Say "RESULT: no malware found - $($script:warn) item(s) worth a look (often harmless - read each line above)." 'Yellow'; $code = 2 }
 else { Say 'RESULT: CLEAN - no signs of this malware.' 'Green'; $code = 0 }
-Say 'Protect yourself from now on:  powershell -ExecutionPolicy Bypass -File .\windows\install.ps1'
+Say "Protect yourself from now on:  $Protect"
 [IO.File]::WriteAllLines($Report, $lines, $Utf8NoBom)
 Say "Report saved: $Report" 'DarkGray'
 Ev 'R' "$code" $Report
