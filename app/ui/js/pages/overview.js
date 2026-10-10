@@ -3,13 +3,18 @@ import { h, button, pill, card, pageHead } from '../dom.js';
 import { icon } from '../icons.js';
 import { fmtTime, nextRun } from '../format.js';
 import { ring, history } from '../charts.js';
-import { S, heroState, latestResult, protectionCount, scopeText, loadReports, INFECTED_GUIDE } from '../store.js';
+import { S, loadTasks, heroState, latestResult, protectionCount, scopeText, loadReports, INFECTED_GUIDE } from '../store.js';
 import { installFlow, setRoutine, startScan } from '../actions.js';
 import { tile, recentReports, protectionRows } from '../components.js';
+import { todoPreview } from './todo.js';
 
 export function renderOverview() {
   if (!S.reports) loadReports();
-  return [pageHead('Overview', 'Your computer\'s protection at a glance.'), hero(), schedule(), tiles(),
+  if (!S.tasks) loadTasks();
+  const todo = S.data.todo || { open: 0 };
+  return [pageHead('Overview', 'Your computer\'s protection at a glance.'), hero(),
+    card(todo.open ? `Your to-do · ${todo.open} open` : 'Your to-do', 'checkCircle', todoPreview(), h('a', { href: '#todo', text: 'Open to-do' })),
+    schedule(), tiles(),
     card('Last 30 days', 'chart', h('div', { class: 'card-pad' }, S.reports ? history(S.reports) : h('div', { class: 'skeleton chart-skeleton' })),
       h('a', { href: '#reports', text: 'All reports' })),
     h('div', { class: 'grid grid-2' },
@@ -26,6 +31,7 @@ function hero() {
     if (st.tone === 'danger') actions.append(button('What to do now', () => { location.hash = INFECTED_GUIDE; }, 'btn-danger-solid btn-lg', 'alert'));
     actions.append(button('Scan now', () => startScan(), st.tone === 'danger' ? 'btn-lg' : 'btn-primary btn-lg', 'play'));
     if (st.fix === 'protect') actions.append(button('Turn on protection', () => installFlow(), '', 'shield'));
+    else if (st.fix === 'todo') actions.append(button('Open checklist', () => { location.hash = '#todo'; }, '', 'checkCircle'));
     else if (r) actions.append(button('See results', () => { location.hash = r.kind === 'scan' ? '#scan' : '#reports'; }, '', 'file'));
   }
   let detail;

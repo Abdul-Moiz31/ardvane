@@ -41,6 +41,7 @@ collaborators. This kit is everything that finally worked, packaged so you don't
 | | |
 |---|---|
 | 🖥️ **Dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
+| ✅ **To-do list** | Every finding becomes a checklist of practical steps; a DANGER opens the recovery checklist; fixes are re-checked by the next scan; weekly GitHub-account checks come back on schedule |
 | 🔍 **One-command machine scan** | Read-only check of your whole computer: implants, running malware, startup items, attacker connections, editor settings, every git project and known malicious packages |
 | 🧱 **Safe clone** | `git clone` downloads without writing project files, scans, and **blocks** infected repositories |
 | 🚫 **Push guard** | `git push` is blocked if your repository contains malware, so you can't spread it to others |

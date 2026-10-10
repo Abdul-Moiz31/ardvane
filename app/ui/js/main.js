@@ -12,9 +12,10 @@ import { renderProtection } from './pages/protection.js';
 import { renderReports } from './pages/reports.js';
 import { renderLearn } from './pages/learn.js';
 import { renderSettings } from './pages/settings.js';
+import { renderTodo } from './pages/todo.js';
 
 /** @type {Record<string, (sub: string) => (Node|null)[]>} */
-const PAGES = { overview: renderOverview, scan: renderScan, protection: renderProtection, reports: renderReports, learn: renderLearn, settings: renderSettings };
+const PAGES = { overview: renderOverview, todo: renderTodo, scan: renderScan, protection: renderProtection, reports: renderReports, learn: renderLearn, settings: renderSettings };
 
 function route() {
   const [page, ...rest] = (location.hash || '#overview').slice(1).split('/');
@@ -29,6 +30,10 @@ function render() {
   document.querySelectorAll('.page').forEach(el => { /** @type {HTMLElement} */ (el).hidden = el.id !== 'page-' + page; });
   const dot = $('#nav-scan-dot');
   if (dot) dot.hidden = !(S.scan && S.scan.running);
+  const badge = $('#nav-todo-count'), open = S.data.todo ? S.data.todo.open : 0;
+  badge.hidden = !open;
+  badge.textContent = String(open);
+  badge.classList.toggle('danger', !!(S.data.todo && S.data.todo.danger));
   const target = $('#page-' + page);
   if (target) target.replaceChildren(...PAGES[page](sub).filter(/** @returns {x is Node} */ x => !!x));
 }

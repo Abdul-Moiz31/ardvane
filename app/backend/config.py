@@ -17,6 +17,7 @@ SCANS = os.path.join(REPORTS, "scans")
 SETTINGS = os.path.join(DEST, "settings.json")
 PROJECTS = os.path.join(DEST, "projects.txt")
 INSTANCE = os.path.join(DEST, "dashboard.json")
+TASKS = os.path.join(DEST, "tasks.json")
 
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"

@@ -17,6 +17,7 @@ export const S = {
   /** @type {Scan|null} */ scan: null,
   /** @type {Report[]|null} */ reports: null,
   /** @type {{group: string, path: string, title: string}[]|null} */ docs: null,
+  /** @type {any} */ tasks: null,
   docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '',
   scanOpts: { mode: 'full', where: 'home', /** @type {boolean|null} */ github: null },
 };
@@ -30,10 +31,22 @@ export function rerender() { renderer(); }
 export async function refresh() {
   S.data = await api('/api/state');
   S.scan = S.data.scan;
+  S.tasks = null;                        // the list may have changed (new findings, protection switched on)
   if (S.scanOpts.github === null) S.scanOpts.github = !!S.data.settings.github_enabled;
   document.querySelectorAll('[data-app-name]').forEach(el => { el.textContent = S.data.app; });
   document.title = S.data.app;
   rerender();
+}
+
+/** Use a fresh task list everywhere: the To-do page, the menu badge and the overview. @param {any} list */
+export function applyTasks(list) {
+  S.tasks = list;
+  if (S.data) S.data.todo = list.counts;
+  rerender();
+}
+
+export async function loadTasks() {
+  try { applyTasks(await api('/api/tasks')); } catch (e) { applyTasks({ tasks: [], counts: { open: 0 } }); }
 }
 
 export async function loadReports() {
@@ -83,6 +96,9 @@ export function heroState() {
     text: `Step ${Math.min(S.scan.steps_done + 1, S.scan.steps_total)} of ${S.scan.steps_total} · ${duration(S.scan.started)}` };
   if (r && r.level === 'danger') return { tone: 'danger', icon: 'shieldAlert', title: 'Action needed',
     text: r.kind === 'scan' ? `${plural(r.danger, 'serious finding')}. Don't open the affected projects or run npm install in them.` : r.verdict };
+  const todo = S.data.todo;
+  if (todo && todo.incident_total && todo.incident_done < todo.incident_total) return { tone: 'danger', icon: 'shieldAlert', fix: 'todo',
+    title: 'Finish your recovery checklist', text: `${todo.incident_done} of ${todo.incident_total} recovery steps done. Until they're all done, the attacker may still have access.` };
   if (!p.installed) return { tone: 'warn', icon: 'shield', fix: 'protect',
     title: r && r.level === 'ok' ? 'Clean — but automatic protection is off' : 'Automatic protection is off',
     text: 'Clones, pulls and pushes aren\'t checked yet. Turning protection on takes about a minute.' };

@@ -8,9 +8,8 @@ from .system import ANSI, read_text
 DAILY_RE = re.compile(r"\d{4}-\d{2}-\d{2}\.txt")
 SCAN_RE = re.compile(r"scan-report-\d{4}-\d{2}-\d{2}-\d{4}\.txt")
 FOLDERS = {"daily": (REPORTS, DAILY_RE), "scan": (SCANS, SCAN_RE)}
-# Finding markers used by the macOS/Linux scripts (emoji) and the Windows scripts (ASCII)
-DANGER_RE = re.compile(r"^\s*(?:🛑|\[DANGER\])", re.M)
-WARN_RE = re.compile(r"^\s*(?:⚠️|\[CHECK\])", re.M)
+# Finding lines written by the macOS/Linux scripts (emoji) and the Windows scripts (ASCII)
+FINDING_RE = re.compile(r"^\s*(🛑|\[DANGER\]|⚠️|\[CHECK\])\s*(.+?)\s*$", re.M)
 
 
 def level_of(verdict):
@@ -26,8 +25,13 @@ def level_of(verdict):
 def summarize(text):
     m = re.search(r"^(?:VERDICT|RESULT): ?(.*)$", text, re.M)
     verdict = m.group(1).strip() if m else ""
-    return {"verdict": verdict, "level": level_of(verdict),
-            "danger": len(DANGER_RE.findall(text)), "warn": len(WARN_RE.findall(text))}
+    levels = [level for level, _ in findings(text)]
+    return {"verdict": verdict, "level": level_of(verdict), "danger": levels.count("danger"), "warn": levels.count("warn")}
+
+
+def findings(text):
+    """[(level, message)] for every DANGER / CHECK line of a report."""
+    return [("danger" if m.group(1) in ("🛑", "[DANGER]") else "warn", m.group(2)) for m in FINDING_RE.finditer(text)]
 
 
 def list_all(limit=400):

@@ -34,6 +34,7 @@ const PATHS = {
   spinner: 'M12 3a9 9 0 1 0 9 9',
   power: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  external: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
 };
 
 export function icon(name, cls) {

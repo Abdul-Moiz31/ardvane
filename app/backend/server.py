@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, docs, launcher, reports, settings, status
+from . import actions, docs, launcher, reports, settings, status, tasks
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
 from .scanjob import ScanJob
 
@@ -52,11 +52,27 @@ class ApiError(Exception):
 
 
 # ---------------------------------------------------------------------------------------------- API handlers
+def current_findings():
+    """Findings from this session's finished scan plus the newest saved reports."""
+    found = tasks.findings_from_reports()
+    job = App.job
+    if job and job.finished and not job.cancelled:
+        for sec in job.state()["sections"]:
+            found += [tasks.finding(i["level"], i["text"], i["path"], job.finished) for i in sec["items"]]
+    return found
+
+
+def task_list(protection=None):
+    data = tasks.sync(current_findings(), protection or status.protection(), set(settings.load()["dismissed"]))
+    return tasks.overview(data)
+
+
 def get_state(q):
     s = settings.load()
     folders, custom = settings.load_folders()
+    protection = status.protection()
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
-            "protection": status.protection(), "last_daily": reports.latest_daily(),
+            "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
             "settings": {"github_enabled": s["github_enabled"], "github_user": s["github_user"], "folders": folders,
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
             "scan": App.scan_state(s["dismissed"])}
@@ -75,6 +91,10 @@ def get_report(q):
     if text is None:
         raise ApiError(404, "report not found")
     return {"text": text}
+
+
+def get_tasks(q):
+    return task_list()
 
 
 def get_docs(q):
@@ -135,6 +155,28 @@ def post_dismiss(b):
     return {"ok": True}
 
 
+def post_task(b):
+    tid = str(b.get("id", ""))
+    try:
+        if "step" in b:
+            tasks.set_step(tid, int(b["step"]), bool(b.get("done")))
+        else:
+            resolution = "mine" if b.get("resolution") == "mine" else "fixed"
+            view = next((t for t in task_list()["tasks"] if t["id"] == tid), None)
+            if view is None:
+                raise KeyError(tid)
+            if resolution == "mine":             # "it's mine" is only for warnings, and also hides them in results
+                if view["group"] != "finding" or view["level"] != "warn":
+                    raise ApiError(400, "only warnings can be marked as yours")
+                s = settings.load()
+                settings.set_dismissed(s, tid[2:], True)
+                settings.save(s)
+            tasks.set_done(tid, bool(b.get("done", True)), resolution)
+    except (KeyError, ValueError, TypeError):
+        raise ApiError(404, "task not found")
+    return task_list()
+
+
 def post_settings(b):
     s = settings.load()
     try:
@@ -162,6 +204,7 @@ def _long_action(fn):
         code, out = fn()
         return {"ok": code == 0, "code": code, "output": out.strip()[-6000:]}
     finally:
+        status.invalidate()
         with App.lock:
             App.busy -= 1
 
@@ -196,9 +239,9 @@ def post_quit(b):
 
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
-              "/api/report": get_report, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
+              "/api/report": get_report, "/api/tasks": get_tasks, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
-               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/settings": post_settings,
+               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit}
 
 

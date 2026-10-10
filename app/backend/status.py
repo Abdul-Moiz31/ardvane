@@ -3,6 +3,8 @@ import os
 import plistlib
 import re
 import shutil
+import threading
+import time
 
 from . import launcher
 from .config import DEST, HOME, IS_MAC, IS_WIN, KIT, RC_MARKER, ROUTINE_LABEL, ROUTINE_TASK
@@ -85,7 +87,29 @@ def npm_scripts_blocked():
     return code == 0 and out.strip().splitlines()[-1:] == ["true"]
 
 
+_cache = {"at": 0.0, "value": None}
+_cache_lock = threading.Lock()
+CACHE_SECONDS = 10
+
+
+def invalidate():
+    """Forget the cached status (call after anything that changes protection)."""
+    with _cache_lock:
+        _cache["value"] = None
+
+
 def protection():
+    """Protection status, cached for a few seconds: it runs git and npm, and the UI asks often."""
+    with _cache_lock:
+        if _cache["value"] is not None and time.time() - _cache["at"] < CACHE_SECONDS:
+            return _cache["value"]
+    value = _protection()
+    with _cache_lock:
+        _cache.update(at=time.time(), value=value)
+    return value
+
+
+def _protection():
     installed = os.path.isfile(os.path.join(DEST, "checkrepo.py"))
     code, hooks_path = run(["git", "config", "--global", "--get", "core.hooksPath"], timeout=10)
     hooks_path = hooks_path.strip() if code == 0 else ""

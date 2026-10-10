@@ -140,6 +140,7 @@ export async function dismiss(key, undo) {
   try {
     await api('/api/dismiss', { key, undo });
     S.scan = (await api('/api/scan')).scan;
+    S.tasks = null;                      // the matching to-do closes (or reopens) too
     rerender();
   } catch (e) { showError(e); }
 }

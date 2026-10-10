@@ -19,11 +19,31 @@ The dashboard stops by itself a few minutes after you close its tab. Clicking th
 | Page | What you can do |
 |---|---|
 | **Overview** | One status: protected, worth a look, or action needed. Run a scan, see when the next daily check runs and change its time, view the last 30 days as a chart. |
+| **To-do** | Concrete steps, each with a checkbox. Every finding becomes a short checklist, a DANGER opens the full recovery checklist (in the guide's order), one-time setup steps (2FA, Vigilant mode, rulesets…) and weekly / monthly routine checks. |
 | **Scan** | Full or quick scan; your whole home folder or only your project folders; optionally your GitHub account. Live progress, then the results grouped by check, with *Show in Finder / Explorer* and *What to do* buttons. Mark harmless warnings as yours to hide them next time. |
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
 | **Settings** | Daily check time (09:00 by default), which folders are scanned, and the optional GitHub check. |
+
+## The to-do list
+
+Scans tell you what's wrong; the to-do list makes sure something is done about it.
+
+- **Every finding becomes a task** with concrete steps and links (for example straight to GitHub's token page).
+  Tick each step as you go, then mark the task as done.
+- **A DANGER opens the recovery checklist**: stop, cut off access, find out how far it went, warn collaborators,
+  clean the computer, clean the repositories, rotate secrets, in that order.
+- **Fixes are verified.** If you mark something as done but a later scan or daily check still finds it, the task comes
+  back and tells you so.
+- **Warnings you recognise** can be marked "It's mine". They're hidden from future results.
+- **Setup steps** (protection, daily check, 2FA, Vigilant mode, rulesets, hardware-backed SSH keys) tick themselves off
+  where the dashboard can see they're done.
+- **Routine checks** come back on schedule: your GitHub security log and access every week, and your editor extensions
+  and kit updates every month.
+
+The menu shows how many steps are open, and the Overview shows the next three. Progress is saved in
+`~/.checkrepo/tasks.json`. The steps themselves live in `app/backend/tasks_catalog.py`, so adding one is a data change.
 
 ## The GitHub check (optional)
 
@@ -68,11 +88,12 @@ app/
 │   ├── scanjob.py      runs scan-my-machine and the GitHub check in the background, parses their events
 │   ├── status.py       read-only protection status
 │   ├── actions.py      runs the kit's install / routine scripts
+│   ├── tasks.py        the to-do list rules · tasks_catalog.py  the steps (data only)
 │   ├── reports.py · docs.py · settings.py · launcher.py · system.py · config.py · cli.py
 ├── ui/                 plain JavaScript modules, no build step
 │   ├── index.html · app.css
 │   └── js/  main.js (router) · store.js · actions.js · components.js · charts.js · markdown.js · …
-│            pages/ one file per page
+│            pages/ one file per page (overview, todo, scan, protection, reports, learn, settings)
 └── tests/test_backend.py
 ```
 

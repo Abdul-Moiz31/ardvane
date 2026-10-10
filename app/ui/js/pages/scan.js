@@ -99,7 +99,11 @@ function results(sc) {
   if (!list.childNodes.length) list.append(empty('checkCircle', 'Every check passed.'));
   const tools = h('div', { class: 'row' },
     h('label', { class: 'row small' }, switchEl(S.showPassed, () => { S.showPassed = !S.showPassed; rerender(); }, 'Show passed checks'), 'Show passed checks'));
-  return h('div', { class: 'stack' }, top, summary, tools, list);
+  const next = (sc.danger || sc.warn) && !sc.cancelled ? h('div', { class: 'banner neutral' }, h('div', { class: 'bicon' }, icon('checkCircle')),
+    h('div', { class: 'grow' }, h('h3', { text: 'Your next steps are in the to-do list' }),
+      h('p', { text: 'Every finding has a short checklist. Tick each step off as you go — a later scan tells you if something is still there.' })),
+    button('Open to-do', () => { location.hash = '#todo'; }, 'btn-primary', 'checkCircle')) : null;
+  return h('div', { class: 'stack' }, top, next, summary, tools, list);
 }
 
 /** @param {string} label @param {string} value */

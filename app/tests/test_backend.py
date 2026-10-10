@@ -9,13 +9,14 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 SANDBOX = tempfile.mkdtemp(prefix="dashboard-test-")
 os.environ["HOME"] = os.environ["USERPROFILE"] = SANDBOX          # must be set before the backend is imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend import config, docs, reports, scanjob, settings    # noqa: E402
+from backend import config, docs, reports, scanjob, settings, tasks    # noqa: E402
 from backend.server import App, Handler                            # noqa: E402
 import http.server                                                 # noqa: E402
 
@@ -78,6 +79,78 @@ class Settings(unittest.TestCase):
             settings.save_folders(["/definitely/not/here"])
         settings.save_folders([SANDBOX])
         self.assertEqual(settings.load_folders(), ([SANDBOX], True))
+
+
+class Tasks(unittest.TestCase):
+    """The to-do list: findings become steps, fixes are verified by later checks, habits come back."""
+
+    PROTECTION_OFF = {"installed": False, "hooks": False, "routine": {"on": False}}
+    PROTECTION_ON = {"installed": True, "hooks": True, "routine": {"on": True}}
+
+    def setUp(self):
+        if os.path.exists(config.TASKS):
+            os.remove(config.TASKS)
+
+    def view(self, data, tid):
+        return next(t for t in tasks.overview(data, now=self.now)["tasks"] if t["id"] == tid)
+
+    now = 1_800_000_000
+
+    def test_danger_creates_finding_task_and_recovery_checklist(self):
+        f = tasks.finding("danger", "INFECTED: ~/code/x — .gitignore: hides the worm's push scripts", "/x", seen=self.now)
+        data = tasks.sync([f], self.PROTECTION_OFF, set(), now=self.now)
+        view = self.view(data, "f-" + f["key"])
+        self.assertEqual((view["title"], view["level"], view["status"]), ("Remove the infected project", "danger", "open"))
+        counts = tasks.overview(data, now=self.now)["counts"]
+        self.assertEqual((counts["incident_total"], counts["incident_done"]), (7, 0))
+
+    def test_fixed_task_reopens_when_a_later_check_still_finds_it(self):
+        f = tasks.finding("danger", "found: ~/.n2", seen=self.now)
+        tid = "f-" + f["key"]
+        tasks.sync([f], self.PROTECTION_OFF, set(), now=self.now)
+        tasks.set_done(tid, True)
+        data = tasks.sync([dict(f, seen=self.now - 10)], self.PROTECTION_OFF, set(), now=self.now)   # older report: no change
+        self.assertEqual(self.view(data, tid)["status"], "done")
+        data = tasks.sync([dict(f, seen=4_000_000_000)], self.PROTECTION_OFF, set(), now=self.now)  # newer check still finds it
+        v = self.view(data, tid)
+        self.assertEqual(v["status"], "open")
+        self.assertIn("still found it", v["reopened"])
+
+    def test_hidden_warning_closes_its_task_and_creates_none(self):
+        w = tasks.finding("warn", "editor extension installed/updated in last 24h: x.y", seen=self.now)
+        data = tasks.sync([w], self.PROTECTION_OFF, {w["key"]}, now=self.now)
+        self.assertNotIn("f-" + w["key"], data["tasks"])
+        tasks.sync([w], self.PROTECTION_OFF, set(), now=self.now)
+        data = tasks.sync([w], self.PROTECTION_OFF, {w["key"]}, now=self.now)
+        self.assertEqual(self.view(data, "f-" + w["key"])["resolution"], "mine")
+        self.assertEqual(self.view(data, "f-" + w["key"])["title"], "Check a new editor extension")
+
+    def test_setup_tasks_follow_protection_status(self):
+        data = tasks.sync([], self.PROTECTION_ON, set(), now=self.now)
+        self.assertEqual(self.view(data, "setup-protection")["resolution"], "auto")
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now)
+        self.assertEqual(self.view(data, "setup-protection")["status"], "open", "switched off again: back on the list")
+
+    def test_routine_checks_come_back(self):
+        tasks.sync([], self.PROTECTION_OFF, set(), now=self.now)
+        tasks.set_done("weekly-security-log", True)
+        data = tasks._load()
+        self.assertEqual(tasks._view("weekly-security-log", data["tasks"]["weekly-security-log"], time.time())["status"], "scheduled")
+        self.assertEqual(tasks._view("weekly-security-log", data["tasks"]["weekly-security-log"], time.time() + 8 * 86400)["status"], "open")
+
+    def test_steps_are_validated(self):
+        tasks.sync([], self.PROTECTION_OFF, set(), now=self.now)
+        tasks.set_step("weekly-access", 1, True)
+        self.assertEqual(tasks._load()["tasks"]["weekly-access"]["steps_done"], [1])
+        with self.assertRaises(KeyError):
+            tasks.set_step("weekly-access", 99, True)
+        with self.assertRaises(KeyError):
+            tasks.set_step("no-such-task", 0, True)
+
+    def test_report_lines_become_findings_with_the_same_key_as_scan_events(self):
+        self.assertEqual(reports.findings("  🛑 found: ~/.n2\n  ⚠️  hosts file has custom entries\n  [CHECK]  x\n  ✅ none"),
+                         [("danger", "found: ~/.n2"), ("warn", "hosts file has custom entries"), ("warn", "x")])
+        self.assertEqual(tasks.finding("danger", "found: ~/.n2")["key"], scanjob.item("danger", "found: ~/.n2")["key"])
 
 
 class Docs(unittest.TestCase):
