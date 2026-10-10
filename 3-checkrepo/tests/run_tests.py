@@ -109,6 +109,11 @@ def write_case(root, files):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        try:   # Windows consoles/pipes may use a legacy code page that can't print ✔ / ✘
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     if not os.path.isfile(SCANNER):
         print("scanner not found:", SCANNER)
         return 2
