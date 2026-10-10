@@ -3,7 +3,7 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
-## 0.2.1
+## 0.2.2
 
 **The GitHub check now sees everything.** It used to stop at your first 100 repositories and skip repositories over
 200 MB. A real infected 202 MB repository was missed that way.
@@ -19,6 +19,9 @@ Each version's section becomes its GitHub release notes automatically. To releas
   longer cause errors, and temporary folders left by an interrupted check are cleaned up.
 - Scan reports are saved in `~/.checkrepo/reports/scans`, where the dashboard lists them, instead of inside the app's
   folder (which an upgrade replaces). The end of a scan now says `ardvane protect` instead of a script path.
+
+## 0.2.1
+
 - The "Ardvane has stopped" message now says how to reopen it: the app icon, or `ardvane` in Terminal.
 - The dashboard waits 20 minutes (was 5) before closing itself, because browsers pause background tabs.
 - "Add app icon" explains what it does: it adds Ardvane to your Applications folder (Start menu on Windows), so you
