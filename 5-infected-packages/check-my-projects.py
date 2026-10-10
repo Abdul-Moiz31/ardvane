@@ -51,6 +51,11 @@ def scan_file(path, name):
 
 
 def main(argv):
+    for stream in (sys.stdout, sys.stderr):
+        try:   # Windows consoles/pipes may use a legacy code page that can't print emoji
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     home = os.path.expanduser("~")
     given = [os.path.expanduser(a) for a in argv]
     for missing in [r for r in given if not os.path.isdir(r)]:
