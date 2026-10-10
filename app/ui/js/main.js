@@ -2,7 +2,7 @@
 // Entry point: routing, rendering and start-up.
 import { api, onOffline } from './api.js';
 import { $, h } from './dom.js';
-import { hydrateIcons } from './icons.js';
+import { hydrateIcons, icon } from './icons.js';
 import { initModal, errorText } from './feedback.js';
 import { S, refresh, setRenderer } from './store.js';
 import { pollScan, setOfflineBanner } from './actions.js';
@@ -42,6 +42,18 @@ setRenderer(render);
 onOffline(setOfflineBanner);
 initModal();
 hydrateIcons();
+themeSwitch();
+
+/** System / Light / Dark buttons in the sidebar (js/theme.js applies the choice). */
+function themeSwitch() {
+  const theme = /** @type {any} */ (window).guardTheme;
+  const box = $('#theme-switch');
+  if (!theme || !box) return;
+  const draw = () => box.replaceChildren(...[['system', 'Auto', 'monitor'], ['light', 'Light', 'sun'], ['dark', 'Dark', 'moon']].map(([value, label, ic]) =>
+    h('button', { type: 'button', 'aria-pressed': String(theme.get() === value), title: value === 'system' ? 'Follow your computer\'s setting' : `${label} mode`,
+      onclick: () => { theme.set(value); draw(); } }, icon(ic), label)));
+  draw();
+}
 window.addEventListener('hashchange', () => { render(); /** @type {HTMLElement} */ ($('#main')).focus({ preventScroll: true }); window.scrollTo(0, 0); });
 
 // Keep the server alive while the tab is open; refresh when the tab comes back into view.

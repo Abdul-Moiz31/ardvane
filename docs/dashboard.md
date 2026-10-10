@@ -12,13 +12,15 @@ python3 app/dashboard.py          # Windows: py -3 app\dashboard.py
 Your browser opens the dashboard. To skip the terminal next time, go to **Protection → App icon → Add app icon**.
 That puts an icon in your Applications folder (macOS), Start menu (Windows) or applications menu (Linux).
 
+Choose light, dark, or Auto (it follows your computer) at the bottom of the menu.
+
 The dashboard stops by itself a few minutes after you close its tab. Clicking the icon again opens it again.
 
 ## What's in it
 
 | Page | What you can do |
 |---|---|
-| **Overview** | One status: protected, worth a look, or action needed. Run a scan, see when the next daily check runs and change its time, view the last 30 days as a chart. |
+| **Overview** | The security dashboard: one status, four numbers (threats, items to review, protection, next daily check), a single "Needs your attention" list combining fixes and to-dos, and the last 30 days as a chart. |
 | **To-do** | Concrete steps, each with a checkbox. Every finding becomes a short checklist, a DANGER opens the full recovery checklist (in the guide's order), one-time setup steps (2FA, Vigilant mode, rulesets…) and weekly / monthly routine checks. |
 | **Scan** | Full or quick scan; your whole home folder or only your project folders; optionally your GitHub account. Live progress, then the results grouped by check, with *Show in Finder / Explorer* and *What to do* buttons. Mark harmless warnings as yours to hide them next time. |
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |

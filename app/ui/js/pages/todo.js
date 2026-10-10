@@ -1,6 +1,6 @@
 // @ts-check
 import { api } from '../api.js';
-import { h, button, pill, card, pageHead, empty, skeleton, busy } from '../dom.js';
+import { h, button, pill, pageHead, skeleton, busy } from '../dom.js';
 import { icon } from '../icons.js';
 import { toast, confirmBox, showError } from '../feedback.js';
 import { fmtTime, plural } from '../format.js';
@@ -128,16 +128,4 @@ async function markMine(t) {
 /** @param {Task} t */
 async function undo(t) {
   try { applyTasks(await api('/api/task', { id: t.id, done: false })); } catch (e) { showError(e); }
-}
-
-/** Short list for the Overview. @param {number} [limit] */
-export function todoPreview(limit = 3) {
-  if (!S.tasks) return skeleton(3);
-  const open = /** @type {Task[]} */ (S.tasks.tasks).filter(t => t.status === 'open');
-  if (!open.length) return empty('checkCircle', 'Nothing to do right now. Routine checks will show up here when they\'re due.');
-  return h('div', { class: 'list' }, open.slice(0, limit).map(t => h('a', { class: 'list-row clickable', href: '#todo' },
-    h('div', { class: 'row-icon ' + (t.level === 'info' ? 'brand' : t.level) }, icon(t.level === 'danger' ? 'xCircle' : t.level === 'warn' ? 'warn' : t.group === 'routine' ? 'clock' : 'shield')),
-    h('div', { class: 'grow' }, h('div', { class: 'title', text: t.title }),
-      h('div', { class: 'desc', text: `${t.steps.filter(s => s.done).length} of ${plural(t.steps.length, 'step')} done` })))),
-  open.length > limit ? h('div', { class: 'list-row' }, h('a', { href: '#todo', text: `See all ${open.length}` })) : null);
 }
