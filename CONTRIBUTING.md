@@ -30,6 +30,13 @@ Thank you for helping other developers stay safe.
 4. The dashboard never changes the system itself: it calls the kit's reviewed scripts in `mac/` and `windows/`.
 5. Keep one responsibility per module, and put shared helpers in one place instead of copying them.
 
+## Releasing
+
+Releases are automatic. In a pull request, raise `VERSION` in `app/backend/config.py` (semantic versioning: `0.1.1` for
+fixes, `0.2.0` for new features) and add a `## <version>` section to `CHANGELOG.md`. CI fails if the version has no
+notes. When the pull request is merged and the tests pass on `main`, `.github/workflows/release.yml` tags the commit
+`v<version>` and publishes the release with those notes. Merges that don't change the version publish nothing.
+
 ## Reporting a problem in the kit itself
 
 If you find a security issue in the kit (for example a way to make it run code), please report it privately first
