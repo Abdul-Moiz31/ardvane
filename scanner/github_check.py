@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """github_check — read-only check of a GitHub account for PolinRider-style activity.
 
-Part of polinrider-survival-kit (MIT License). Python 3.8+, no dependencies.
+Part of Ardvane (MIT License). Python 3.8+, no dependencies.
 
 What it does (never changes anything on GitHub):
   1. Lists the account's repositories and the ones pushed recently.
@@ -68,7 +68,7 @@ class Client:
             data = r.stdout
         else:
             req = urllib.request.Request(API + path, headers={"Accept": "application/vnd.github+json",
-                                                              "User-Agent": "polinrider-survival-kit"})
+                                                              "User-Agent": "ardvane"})
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     data = resp.read(limit + 1)

@@ -1,4 +1,4 @@
-# polinrider-survival-kit - schedule the daily check on Windows with Task Scheduler (BETA).
+# Ardvane - schedule the daily check on Windows with Task Scheduler (BETA).
 # Runs every day at 09:00 (or as soon as possible if the PC was off). Also records fingerprints of the kit's
 # files so the check can tell you if malware tampers with them.
 #   powershell -ExecutionPolicy Bypass -File .\windows\install-routine.ps1 [-At "08:30"]

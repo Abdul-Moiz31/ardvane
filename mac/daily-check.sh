@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — daily security check for macOS (read-only).
+# Ardvane — daily security check for macOS (read-only).
 # Checks this Mac for the campaign's implants, persistence and C2 connections, scans your projects with
 # checkrepo, verifies the kit's protections are still on, and writes a report + shows a notification.
 #
@@ -22,7 +22,7 @@ out() { echo "$*" >> "$REPORT"; }
 bad() { danger=$((danger+1)); out "  🛑 $*"; }
 chk() { warn=$((warn+1)); out "  ⚠️  $*"; }
 : > "$REPORT"
-out "polinrider-survival-kit daily check — $(date '+%Y-%m-%d %H:%M')"
+out "Ardvane daily check — $(date '+%Y-%m-%d %H:%M')"
 out ""
 
 # ---------------------------------------------------------------- 1. implants & stealer folders

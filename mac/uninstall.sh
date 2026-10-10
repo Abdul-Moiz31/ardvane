@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — uninstaller for macOS / Linux. Reverses install.sh and install-routine.sh.
+# Ardvane — uninstaller for macOS / Linux. Reverses install.sh and install-routine.sh.
 # Leaves npm's ignore-scripts and your editor settings as they are (they are good defaults);
 # the commands to revert them are printed at the end.
 

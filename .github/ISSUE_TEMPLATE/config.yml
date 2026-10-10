@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security problem in the kit itself
-    url: https://github.com/Abdul-Moiz31/polinrider-survival-kit/security/advisories/new
+    url: https://github.com/Abdul-Moiz31/ardvane/security/advisories/new
     about: Please report vulnerabilities privately.
   - name: I think I'm infected
-    url: https://github.com/Abdul-Moiz31/polinrider-survival-kit/blob/main/docs/after-a-scan/if-danger-found.md
+    url: https://github.com/Abdul-Moiz31/ardvane/blob/main/docs/after-a-scan/if-danger-found.md
     about: Follow the step-by-step guide first — the order matters.

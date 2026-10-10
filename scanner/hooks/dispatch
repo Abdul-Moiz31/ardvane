@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# polinrider-survival-kit — global git hook dispatcher.
+# Ardvane — global git hook dispatcher.
 # Installed as ~/.checkrepo/hooks/<hook-name> (all names point here) and enabled with:
 #   git config --global core.hooksPath ~/.checkrepo/hooks
 #

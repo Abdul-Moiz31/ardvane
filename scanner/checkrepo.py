@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """checkrepo — read-only scanner for PolinRider / Contagious Interview / TasksJacker / GlassWorm-style malware.
 
-Part of polinrider-survival-kit (MIT License).
+Part of Ardvane (MIT License).
 
 It NEVER executes anything from the scanned folder; it only reads bytes. Works on macOS, Linux and Windows
 (Python 3.8+, no dependencies).
@@ -636,7 +636,7 @@ def main(argv):
         mark = f"{R}✗{X}" if sev == "DANGER" else f"{Y}!{X}"
         print(f"  {mark} {rel}  — {detail}")
     if danger:
-        print(f"\n  What to do: see docs/after-a-scan/if-danger-found.md in polinrider-survival-kit (cut off access first, then clean).")
+        print(f"\n  What to do: see docs/after-a-scan/if-danger-found.md in Ardvane (cut off access first, then clean).")
         print(f"  Sure it's a false alarm? Allow that exact file: add its SHA-256 to ~/.config/checkrepo/allowlist")
     print()
     return code

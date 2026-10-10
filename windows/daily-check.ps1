@@ -1,4 +1,4 @@
-# polinrider-survival-kit - daily security check for Windows (read-only). BETA: not yet tested on real Windows.
+# Ardvane - daily security check for Windows (read-only). BETA: not yet tested on real Windows.
 # Checks for the campaign's implants, persistence and C2 connections, scans your projects with checkrepo,
 # verifies the kit's protections are still on, writes a report and shows a notification.
 #   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.checkrepo\daily-check.ps1"
@@ -19,7 +19,7 @@ function Invoke-Native([scriptblock]$Block) {
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { & $Block } finally { $ErrorActionPreference = $old }
 }
-Add-Line "polinrider-survival-kit daily check - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"; Add-Line ''
+Add-Line "Ardvane daily check - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"; Add-Line ''
 
 # 1. known malware locations
 Add-Line '1. Known malware locations'; $n = $script:danger

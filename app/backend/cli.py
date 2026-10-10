@@ -15,7 +15,7 @@ from .config import APP_NAME, IDLE_LIMIT, INSTANCE, VERSION
 from .server import App, Handler
 from .system import read_json, write_private
 
-USAGE = f"""{APP_NAME} — local dashboard for polinrider-survival-kit
+USAGE = f"""{APP_NAME} — local dashboard for Ardvane
 
   python3 app/dashboard.py                  open the dashboard in your browser
   python3 app/dashboard.py --no-browser     print the address instead of opening it

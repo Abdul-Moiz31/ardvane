@@ -6,7 +6,7 @@ import { markdown } from '../markdown.js';
 import { S, rerender, INFECTED_GUIDE } from '../store.js';
 
 const START = INFECTED_GUIDE.replace('#learn/', '');
-const REPO_URL = 'https://github.com/Abdul-Moiz31/polinrider-survival-kit/blob/main/';
+const REPO_URL = 'https://github.com/Abdul-Moiz31/ardvane/blob/main/';
 
 /** @param {string} sub path of the guide inside docs/ */
 export function renderLearn(sub) {
