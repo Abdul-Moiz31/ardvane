@@ -2,9 +2,9 @@
 import os
 import sys
 
-APP_NAME = "PolinRider Guard"            # working title: the product name lives here and in ui/index.html
-APP_ID = "polinrider-guard"
-VERSION = "1.1.0"
+APP_NAME = "Ardvane"                      # the product name lives here and in ui/index.html
+APP_ID = "ardvane"
+VERSION = "0.1.0"
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT = os.environ.get("POLINRIDER_KIT") or os.path.dirname(APP_DIR)

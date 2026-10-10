@@ -40,7 +40,7 @@ collaborators. This kit is everything that finally worked, packaged so you don't
 
 | | |
 |---|---|
-| 🖥️ **Dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
+| 🖥️ **Ardvane dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
 | 🔧 **Fixes, with undo** | The app can fix what's safe to fix: editor and npm settings, switched-off protection, malware in known locations (moved to quarantine, never deleted). Ask-first by default, or fully automatic |
 | ✅ **To-do list** | Every finding becomes a checklist of practical steps; a DANGER opens the recovery checklist; fixes are re-checked by the next scan; weekly GitHub-account checks come back on schedule |
 | 🔍 **One-command machine scan** | Read-only check of your whole computer: implants, running malware, startup items, attacker connections, editor settings, every git project and known malicious packages |
@@ -117,13 +117,13 @@ Open a new terminal and run `checkrepo --version`. Undo everything any time with
 (or `uninstall.ps1`). The installer backs up every file it edits, never replaces an existing git hooks setup without
 asking, and is safe to run again.
 
-### Prefer a window to the terminal?
+### Prefer a window to the terminal? Use Ardvane
 
 ```bash
 python3 app/dashboard.py
 ```
 
-The dashboard opens in your browser and runs **only on your computer**. It can scan, turn protection on, schedule the
+**Ardvane**, the kit's dashboard, opens in your browser and runs **only on your computer**. It can scan, turn protection on, schedule the
 daily check at the time you choose, and add an app icon so you never need the terminal again.
 → [Dashboard guide](docs/dashboard.md)
 

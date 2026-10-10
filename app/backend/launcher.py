@@ -42,7 +42,7 @@ def _mac():
     os.chmod(exe, 0o755)
     icon_ok = run(["sips", "-s", "format", "icns", os.path.join(UI, "icon.png"), "--out",
                    os.path.join(resources, "AppIcon.icns")], timeout=60)[0] == 0
-    info = {"CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME, "CFBundleIdentifier": "org.polinrider-survival-kit.dashboard",
+    info = {"CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME, "CFBundleIdentifier": "dev.ardvane.dashboard",
             "CFBundleExecutable": APP_ID, "CFBundlePackageType": "APPL", "CFBundleShortVersionString": VERSION,
             "LSUIElement": True, "LSMinimumSystemVersion": "10.13"}
     if icon_ok:

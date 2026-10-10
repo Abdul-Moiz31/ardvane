@@ -1,4 +1,4 @@
-# The dashboard
+# Ardvane — the dashboard
 
 A window for everything the kit does: scan, see results, turn protection on and off, choose when the daily check
 runs, read the guides. It runs **only on your computer**, with no account and no tracking.
