@@ -3,6 +3,13 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.2.1
+
+- The "Ardvane has stopped" message now says how to reopen it: the app icon, or `ardvane` in Terminal.
+- The dashboard waits 20 minutes (was 5) before closing itself, because browsers pause background tabs.
+- "Add app icon" explains what it does: it adds Ardvane to your Applications folder (Start menu on Windows), so you
+  can open it from Launchpad, Spotlight or the Dock.
+
 ## 0.2.0
 
 **Install Ardvane with one command.** No cloning needed.

@@ -30,7 +30,7 @@ USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads throug
   {PROG} launcher [--remove]          add (or remove) the app icon
   {PROG} --version
 
-The dashboard runs on 127.0.0.1 and stops by itself a few minutes after you close its tab.
+The dashboard runs on 127.0.0.1 and closes itself about 20 minutes after you stop using it.
 """
 
 
@@ -79,7 +79,7 @@ def serve(open_browser=True, port=0):
     threading.Thread(target=_watchdog, daemon=True).start()
     signal.signal(signal.SIGTERM, _stop_on_sigterm)
     print(f"{APP_NAME} is running on this computer only (port {App.port}).", flush=True)
-    print("It stops by itself a few minutes after you close the browser tab, or press Ctrl+C.", flush=True)
+    print("It closes itself about 20 minutes after you stop using it, or press Ctrl+C.", flush=True)
     if open_browser:
         webbrowser.open(url)
     else:

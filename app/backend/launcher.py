@@ -59,7 +59,7 @@ def _mac():
     with open(os.path.join(bundle, "Contents", "Info.plist"), "wb") as f:
         plistlib.dump(info, f)
     run(["touch", bundle], timeout=10)          # make Finder pick up the icon
-    return 0, f"Added {APP_NAME} to your Applications folder. Open it from Launchpad or Spotlight."
+    return 0, f"Added {APP_NAME} to your Applications folder. Open it from Launchpad, or press ⌘ Space and type {APP_NAME}."
 
 
 def _windows():

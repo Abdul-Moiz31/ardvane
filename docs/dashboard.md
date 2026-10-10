@@ -10,12 +10,13 @@ ardvane                           # after `brew install abdul-moiz31/ardvane/ard
 python3 app/dashboard.py          # from a clone of the repository (Windows: py -3 app\dashboard.py)
 ```
 
-Your browser opens the dashboard. To skip the terminal next time, go to **Protection → App icon → Add app icon**.
-That puts an icon in your Applications folder (macOS), Start menu (Windows) or applications menu (Linux).
+Your browser opens the dashboard. To skip the terminal next time, go to **Protection → Add app icon**. That adds an
+Ardvane app to your Applications folder (macOS), Start menu (Windows) or applications menu (Linux), so you can open it
+from Launchpad, Spotlight or the Dock like any other app.
 
 Choose light, dark, or Auto (it follows your computer) at the bottom of the menu.
 
-The dashboard stops by itself a few minutes after you close its tab. Clicking the icon again opens it again.
+The dashboard closes itself about 20 minutes after you stop using it. Clicking the icon (or typing `ardvane`) opens it again.
 
 ## What's in it
 
