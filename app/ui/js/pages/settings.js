@@ -32,6 +32,15 @@ function folders() {
     catch (e) { S.folderErr = errorText(e); rerender(); }
   };
   const add = () => { const v = input.value.trim(); if (v) saveList(s.folders.concat([v])); };
+  const choose = async () => {
+    try {
+      const r = await api('/api/pick-folder', {});
+      if (r.path) return s.folders.includes(r.path) ? toast(`${r.path} is already in the list`) : saveList(s.folders.concat([r.path]));
+      if (r.unavailable) { input.focus(); toast('No folder picker on this system — type the path instead', 'danger'); }
+      if (r.busy) toast('A folder window is already open — look for it behind this one', 'danger');
+    } catch (e) { showError(e); }
+  };
+  const chooseBtn = button(S.data.os === 'mac' ? 'Choose folder in Finder…' : 'Choose folder…', () => busy(chooseBtn, choose), 'btn-primary', 'folder');
   input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
   return card('What gets scanned', 'folder', h('div', { class: 'card-pad stack' },
     h('div', { class: 'row' }, h('div', { class: 'row-icon ok' }, icon('laptop')),
@@ -43,7 +52,7 @@ function folders() {
       h('div', { class: 'help', text: 'The daily check scans every git project inside these folders, plus your Downloads folder.' + (s.folders_custom ? '' : ' These are the defaults.') })),
     h('div', { class: 'chips' }, s.folders.map((/** @type {string} */ f, /** @type {number} */ i) => h('div', { class: 'chip' }, icon('folder'), h('span', { class: 'mono', text: f }),
       button('', () => saveList(s.folders.filter((/** @type {string} */ _, /** @type {number} */ j) => j !== i)), 'btn-sm btn-ghost', 'x', { 'aria-label': 'Remove ' + f, title: 'Remove' })))),
-    h('div', { class: 'row' }, input, button('Add folder', add, '', 'plus'),
+    h('div', { class: 'row' }, chooseBtn, h('span', { class: 'muted small', text: 'or type a path' }), input, button('Add', add, '', 'plus'),
       s.folders_custom ? button('Reset to defaults', () => saveList(s.default_folders), 'btn-ghost') : null),
     S.folderErr ? h('div', { class: 'err', role: 'alert', text: S.folderErr }) : null));
 }

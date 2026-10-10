@@ -24,7 +24,7 @@ The dashboard stops by itself a few minutes after you close its tab. Clicking th
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
-| **Settings** | Daily check time (09:00 by default), which folders are scanned, what the app may fix for you, and the optional GitHub check. |
+| **Settings** | Daily check time (09:00 by default), which folders are scanned (added with Finder / the Windows folder picker), what the app may fix for you, and the optional GitHub check. |
 
 ## The to-do list
 

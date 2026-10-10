@@ -189,6 +189,25 @@ class Fixes(unittest.TestCase):
             server.post_unfix({"id": "nope"})
 
 
+class FolderPicker(unittest.TestCase):
+    """The native picker is replaced by a fake: tests must never open a dialog on the screen."""
+
+    def pick(self, code, out):
+        from backend import actions
+        if actions._picker_command() is None:
+            self.skipTest("no folder picker on this system")
+        return actions.pick_folder(runner=lambda cmd, timeout: (code, out))
+
+    def test_picked_folder_inside_home_is_shortened(self):
+        os.makedirs(os.path.join(SANDBOX, "code"), exist_ok=True)
+        self.assertEqual(self.pick(0, os.path.join(SANDBOX, "code") + os.sep + "\n"), {"path": os.path.join("~", "code")})
+
+    def test_cancel_and_garbage_are_ignored(self):
+        self.assertEqual(self.pick(1, "execution error: User canceled. (-128)"), {"cancelled": True})
+        self.assertEqual(self.pick(0, "relative/path"), {"cancelled": True})
+        self.assertEqual(self.pick(0, "/definitely/not/a/folder"), {"cancelled": True})
+
+
 class Docs(unittest.TestCase):
     def test_only_listed_guides_can_be_read(self):
         listed = docs.list_all()
