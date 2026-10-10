@@ -8,7 +8,7 @@ export function plural(n, one, many) { return `${n} ${n === 1 ? one : (many || o
 export function fmtTime(ts) {
   if (!ts) return '';
   const d = new Date(ts * 1000);
-  const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86400000);
+  const days = Math.round((dayStart(new Date()).getTime() - dayStart(d).getTime()) / 86400000);
   if (days === 0) return 'today at ' + clock(d);
   if (days === 1) return 'yesterday at ' + clock(d);
   return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' at ' + clock(d);
@@ -25,7 +25,7 @@ export function nextRun(hhmm) {
   const now = new Date();
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), H, M);
   if (next <= now) next.setDate(next.getDate() + 1);
-  const mins = Math.round((next - now) / 60000);
+  const mins = Math.round((next.getTime() - now.getTime()) / 60000);
   const when = (next.getDate() === now.getDate() ? 'today' : 'tomorrow') + ' at ' + clock(next);
   return `${when} (in ${mins < 60 ? mins + ' min' : Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min'})`;
 }

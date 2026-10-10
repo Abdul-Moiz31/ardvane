@@ -20,10 +20,13 @@ export function onOffline(fn) { offlineListeners.push(fn); }
 function setOffline(off) { offlineListeners.forEach(fn => fn(off)); }
 
 export async function api(path, body) {
-  const opts = { headers: { 'X-Guard-Key': key() }, cache: 'no-store' };
+  /** @type {Record<string, string>} */
+  const headers = { 'X-Guard-Key': key() };
+  /** @type {RequestInit} */
+  const opts = { headers, cache: 'no-store' };
   if (body !== undefined) {
     opts.method = 'POST';
-    opts.headers['Content-Type'] = 'application/json';
+    headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
   let res;

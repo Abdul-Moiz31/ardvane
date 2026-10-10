@@ -18,8 +18,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Self-test (must-catch / must-warn / must-pass / security / consistency)
@@ -40,8 +40,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Backend tests (API security checks, parsing, validation)
@@ -51,10 +51,10 @@ jobs:
     name: dashboard UI (type check)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Syntax check every module
         run: for f in app/ui/js/*.js app/ui/js/pages/*.js; do node --check "$f" || exit 1; done
       - name: Type check (JSDoc + @ts-check; CI only, nothing is installed for users)
@@ -68,7 +68,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Syntax check
         run: for f in scan-my-machine.sh mac/*.sh scanner/hooks/dispatch scanner/safeclone/git-safeclone; do bash -n "$f" || exit 1; done
       - name: Install into a throw-away home folder, then uninstall
@@ -86,8 +86,8 @@ jobs:
     name: PowerShell scripts (windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Parse every .ps1 with Windows PowerShell 5.1

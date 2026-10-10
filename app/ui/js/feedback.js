@@ -48,5 +48,5 @@ export function outputBox(title, ok, output, after) {
 
 export function initModal() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
-  $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+  $('#modal').addEventListener('click', e => { if (/** @type {HTMLElement} */ (e.target).id === 'modal') closeModal(); });
 }
