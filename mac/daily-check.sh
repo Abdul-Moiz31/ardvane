@@ -146,6 +146,18 @@ if [ -n "$gh_user" ] && [ -f "$DEST/github_check.py" ]; then
   [ $ghrc -eq 3 ] && chk "the GitHub check could not run (see the line above)"
 fi
 
+# ---------------------------------------------------------------- 8. automatic fixes (only in "Automatic" mode)
+if [ -n "$PY" ] && [ -f "$DEST/autofix.py" ] && [ "$("$PY" -c 'import json,sys
+try: print(json.load(open(sys.argv[1], encoding="utf-8")).get("autofix", "ask"))
+except Exception: print("ask")' "$DEST/settings.json" 2>/dev/null)" = "auto" ]; then
+  fixed="$("$PY" "$DEST/autofix.py" auto 2>&1)"
+  if [ -n "$fixed" ]; then
+    out "8. Automatic fixes"
+    while IFS= read -r l; do out "$l"; done <<< "$fixed"
+    [ $danger -gt 0 ] && out "  Files were removed from this computer, but anything stolen before is still stolen — finish the recovery checklist."
+  fi
+fi
+
 # ---------------------------------------------------------------- verdict
 out ""
 if [ $danger -gt 0 ]; then verdict="ACTION NEEDED — $danger serious finding(s). Don't open affected projects; see docs/after-a-scan/if-danger-found.md"

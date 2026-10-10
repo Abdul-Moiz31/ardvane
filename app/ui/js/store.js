@@ -18,6 +18,7 @@ export const S = {
   /** @type {Report[]|null} */ reports: null,
   /** @type {{group: string, path: string, title: string}[]|null} */ docs: null,
   /** @type {any} */ tasks: null,
+  /** @type {any} */ fixes: null,
   docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '',
   scanOpts: { mode: 'full', where: 'home', /** @type {boolean|null} */ github: null },
 };
@@ -32,10 +33,22 @@ export async function refresh() {
   S.data = await api('/api/state');
   S.scan = S.data.scan;
   S.tasks = null;                        // the list may have changed (new findings, protection switched on)
+  S.fixes = null;
   if (S.scanOpts.github === null) S.scanOpts.github = !!S.data.settings.github_enabled;
   document.querySelectorAll('[data-app-name]').forEach(el => { el.textContent = S.data.app; });
   document.title = S.data.app;
   rerender();
+}
+
+/** @type {Record<string, Promise<void>>} */
+const inFlight = {};
+/**
+ * Run a loader once at a time: further calls while it runs share the same request.
+ * @param {string} name @param {() => Promise<void>} fn
+ */
+export function loadOnce(name, fn) {
+  if (!inFlight[name]) inFlight[name] = fn().finally(() => { delete inFlight[name]; });
+  return inFlight[name];
 }
 
 /** Use a fresh task list everywhere: the To-do page, the menu badge and the overview. @param {any} list */
@@ -45,13 +58,17 @@ export function applyTasks(list) {
   rerender();
 }
 
-export async function loadTasks() {
-  try { applyTasks(await api('/api/tasks')); } catch (e) { applyTasks({ tasks: [], counts: { open: 0 } }); }
+export function loadTasks() {
+  return loadOnce('tasks', async () => {
+    try { applyTasks(await api('/api/tasks')); } catch (e) { applyTasks({ tasks: [], counts: { open: 0 } }); }
+  });
 }
 
-export async function loadReports() {
-  try { S.reports = (await api('/api/reports')).reports; } catch (e) { S.reports = []; }
-  rerender();
+export function loadReports() {
+  return loadOnce('reports', async () => {
+    try { S.reports = (await api('/api/reports')).reports; } catch (e) { S.reports = []; }
+    rerender();
+  });
 }
 
 /** Route of the recovery guide, linked from every DANGER result. */
@@ -94,6 +111,9 @@ export function heroState() {
   const p = S.data.protection, r = latestResult();
   if (S.scan && S.scan.running) return { tone: 'neutral', icon: 'radar', title: 'Scanning your computer…',
     text: `Step ${Math.min(S.scan.steps_done + 1, S.scan.steps_total)} of ${S.scan.steps_total} · ${duration(S.scan.started)}` };
+  const malware = S.fixes ? S.fixes.available.filter(/** @param {any} f */ f => f.kind === 'quarantine' || f.kind === 'process') : [];
+  if (malware.length) return { tone: 'danger', icon: 'shieldAlert', fix: 'fixes', title: 'Malware found on this computer',
+    text: `${malware.length === 1 ? 'One known malware item is' : malware.length + ' known malware items are'} on this computer. Move ${malware.length === 1 ? 'it' : 'them'} to quarantine below, then follow the recovery checklist.` };
   if (r && r.level === 'danger') return { tone: 'danger', icon: 'shieldAlert', title: 'Action needed',
     text: r.kind === 'scan' ? `${plural(r.danger, 'serious finding')}. Don't open the affected projects or run npm install in them.` : r.verdict };
   const todo = S.data.todo;

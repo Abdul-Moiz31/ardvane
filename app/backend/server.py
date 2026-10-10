@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, docs, launcher, reports, settings, status, tasks
+from . import actions, docs, fixes, launcher, reports, settings, status, tasks
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
 from .scanjob import ScanJob
 
@@ -73,7 +73,7 @@ def get_state(q):
     protection = status.protection()
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
-            "settings": {"github_enabled": s["github_enabled"], "github_user": s["github_user"], "folders": folders,
+            "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"], "folders": folders,
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
             "scan": App.scan_state(s["dismissed"])}
 
@@ -127,8 +127,56 @@ def post_scan(b):
         user = settings.load()["github_user"]
         if not user:
             raise ApiError(400, "add your GitHub username in Settings first")
-    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user)
+    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, on_finish=_after_scan)
     return {"scan": App.job.state()}
+
+
+def _after_scan(job):
+    """Automatic mode: apply the auto-safe fixes as soon as a scan finishes."""
+    try:
+        done = fixes.apply_auto_if_enabled()
+        if any(e.get("ok") and e.get("kind") in ("quarantine", "process") for e in done):
+            tasks.start_incident()
+        return done
+    except Exception as e:      # a failed fix must never lose the scan results
+        return [{"title": "Automatic fixes", "ok": False, "error": str(e)}]
+
+
+def infected_projects():
+    """Project folders the last scan flagged as DANGER (the only folders a project fix may be offered for)."""
+    job = App.job
+    if not job or not job.finished:
+        return []
+    return sorted({i["path"] for s in job.state()["sections"] for i in s["items"]
+                   if i["level"] == "danger" and i["path"] and os.path.isdir(i["path"]) and s["title"].startswith("Your projects")})
+
+
+def get_fixes(q):
+    return fixes.overview(infected_projects())
+
+
+def post_fix(b):
+    if fixes.mode() == "off":
+        raise ApiError(400, "fixes are turned off in Settings")
+    try:
+        entry = fixes.apply(str(b.get("id", "")), infected_projects())
+    except LookupError as e:
+        raise ApiError(409, str(e))
+    if entry.get("ok") and entry.get("target"):
+        tasks.resolve_path(entry["target"])            # the matching to-do is done; the next scan double-checks it
+    if entry.get("ok") and entry.get("kind") in ("quarantine", "process"):
+        tasks.start_incident()                         # the computer was infected: recovery steps are still needed
+    status.invalidate()
+    return {"entry": entry, "fixes": fixes.overview(infected_projects())}
+
+
+def post_unfix(b):
+    try:
+        entry = fixes.undo(str(b.get("id", "")))
+    except (LookupError, ValueError, OSError) as e:
+        raise ApiError(409, str(e))
+    status.invalidate()
+    return {"entry": entry, "fixes": fixes.overview(infected_projects())}
 
 
 def post_cancel(b):
@@ -184,6 +232,10 @@ def post_settings(b):
             s["github_user"] = settings.clean_github_user(b["github_user"])
         if "github_enabled" in b:
             s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
+        if "autofix" in b:
+            if b["autofix"] not in settings.AUTOFIX_MODES:
+                raise ValueError("unknown fix mode")
+            s["autofix"] = b["autofix"]
         if "folders" in b:
             if not isinstance(b["folders"], list):
                 raise ValueError("folders must be a list")
@@ -239,9 +291,9 @@ def post_quit(b):
 
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
-              "/api/report": get_report, "/api/tasks": get_tasks, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
+              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
-               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/settings": post_settings,
+               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit}
 
 

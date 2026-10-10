@@ -14,7 +14,7 @@ if (-not (Test-Path "$Dest\checkrepo.py")) { Write-Host 'Install the scanner fir
 Copy-Item "$PSScriptRoot\daily-check.ps1" "$Dest\daily-check.ps1" -Force
 Unblock-File "$Dest\daily-check.ps1" -ErrorAction SilentlyContinue
 # fingerprint every file git or the routine will run (Windows hooks are copies, so each one is listed)
-$files = @("$Dest\checkrepo.py", "$Dest\github_check.py", "$Dest\bin\safeclone.ps1", "$Dest\bin\git-safeclone", "$Dest\daily-check.ps1") +
+$files = @("$Dest\checkrepo.py", "$Dest\kitlib.py", "$Dest\github_check.py", "$Dest\autofix.py", "$Dest\malware-paths.txt", "$Dest\bin\safeclone.ps1", "$Dest\bin\git-safeclone", "$Dest\daily-check.ps1") +
          @(Get-ChildItem "$Dest\hooks" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 $fp = foreach ($f in $files) { if (Test-Path $f) { "$((Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()) $f" } }
 [IO.File]::WriteAllLines("$Dest\fingerprints.txt", [string[]]$fp, (New-Object System.Text.UTF8Encoding $false))

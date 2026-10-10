@@ -85,16 +85,9 @@ def sync(found, protection, dismissed, now=None):
                 t.update(done_at=now, resolution="mine")
                 changed = True
 
-        # A DANGER opens the recovery checklist; a new DANGER after the checklist was finished opens it again.
         dangers = [f["seen"] for f in found if f["level"] == "danger"]
         if dangers:
-            existing = [tasks.get(t["id"]) for t in INCIDENT]
-            finished = all(e and e.get("done_at") for e in existing)
-            last_done = max((e["done_at"] for e in existing if e and e.get("done_at")), default=0)
-            if any(e is None for e in existing) or (finished and max(dangers) > last_done):
-                for t in INCIDENT:
-                    tasks[t["id"]] = {"kind": "incident", "created": now, "steps_done": [], "done_at": None}
-                changed = True
+            changed = _open_incident(tasks, max(dangers), now) or changed
 
         for t in SETUP:
             st = tasks.setdefault(t["id"], {"kind": "setup", "created": now, "steps_done": [], "done_at": None})
@@ -116,6 +109,28 @@ def sync(found, protection, dismissed, now=None):
         if changed or not read_json(TASKS, {}):
             _save(data)
         return data
+
+
+def _open_incident(tasks, evidence_time, now):
+    """Open the recovery checklist for evidence seen at `evidence_time` — unless it's already open, or was finished
+    after that evidence. Returns True when the list changed."""
+    existing = [tasks.get(t["id"]) for t in INCIDENT]
+    finished = all(e and e.get("done_at") for e in existing)
+    last_done = max((e["done_at"] for e in existing if e and e.get("done_at")), default=0)
+    if any(e is None for e in existing) or (finished and evidence_time > last_done):
+        for t in INCIDENT:
+            tasks[t["id"]] = {"kind": "incident", "created": now, "steps_done": [], "done_at": None}
+        return True
+    return False
+
+
+def start_incident():
+    """Malware was removed from this computer: whatever it stole is still stolen, so recovery starts now."""
+    with _lock:
+        data = _load()
+        now = time.time()
+        if _open_incident(data["tasks"], now, now):
+            _save(data)
 
 
 def _view(tid, st, now):
@@ -182,6 +197,16 @@ def set_step(tid, index, done):
         steps.add(index) if done else steps.discard(index)
         st["steps_done"] = sorted(steps)
     _update(tid, apply)
+
+
+def resolve_path(path):
+    """A fix removed `path`: close the open to-do items about it. A later scan reopens them if it's still there."""
+    with _lock:
+        data = _load()
+        for st in data["tasks"].values():
+            if st.get("kind") == "finding" and st.get("path") == path and not st.get("done_at"):
+                st.update(done_at=time.time(), resolution="fixed")
+        _save(data)
 
 
 def set_done(tid, done, resolution="fixed"):

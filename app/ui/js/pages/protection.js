@@ -5,6 +5,7 @@ import { ring } from '../charts.js';
 import { S, protectionCount } from '../store.js';
 import { installFlow, uninstallFlow, launcherAction } from '../actions.js';
 import { protectionRows } from '../components.js';
+import { historyCard } from '../fixes.js';
 
 export function renderProtection() {
   const p = S.data.protection, pc = protectionCount(p);
@@ -13,6 +14,7 @@ export function renderProtection() {
     statusBanner(p, pc),
     h('div', { class: 'card' }, h('div', { class: 'list' }, protectionRows(false))),
     appIcon(p),
+    historyCard(),
     p.installed ? h('div', { class: 'card card-pad row' },
       h('div', { class: 'grow' }, h('h3', { text: 'Remove protection' }),
         h('div', { class: 'help', text: 'Turns off the git hooks, safe clone and daily check and restores your previous settings. Reports are kept.' })),

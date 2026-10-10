@@ -13,11 +13,13 @@ from .system import read_json, write_private
 GITHUB_USER_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 MAX_DISMISSED = 500
 MAX_FOLDERS = 50
+AUTOFIX_MODES = ("ask", "auto", "off")          # same as scanner/autofix.py MODES (a test keeps them equal)
 
 
 def load():
     s = read_json(SETTINGS, {})
     return {
+        "autofix": s.get("autofix") if s.get("autofix") in AUTOFIX_MODES else "ask",
         "github_enabled": bool(s.get("github_enabled")),
         "github_user": str(s.get("github_user") or ""),
         "dismissed": [d for d in s.get("dismissed", []) if isinstance(d, str)][-MAX_DISMISSED:],

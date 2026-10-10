@@ -130,6 +130,18 @@ if ($py -and $ghUser -and (Test-Path "$Dest\github_check.py")) {
     }
 }
 
+# 8. automatic fixes (only in "Automatic" mode)
+$fixMode = 'ask'
+try { $st2 = Get-Content "$Dest\settings.json" -Raw -ErrorAction Stop | ConvertFrom-Json; if ($st2.autofix) { $fixMode = "$($st2.autofix)" } } catch { }
+if ($py -and $fixMode -eq 'auto' -and (Test-Path "$Dest\autofix.py")) {
+    $fixed = Invoke-Native { & $py.Exe @($py.Args) "$Dest\autofix.py" auto 2>&1 }
+    if ($fixed) {
+        Add-Line '8. Automatic fixes'
+        $fixed | ForEach-Object { Add-Line "$_" }
+        if ($script:danger -gt 0) { Add-Line '  Files were removed from this computer, but anything stolen before is still stolen - finish the recovery checklist.' }
+    }
+}
+
 # verdict
 if ($script:danger -gt 0) { $verdict = "ACTION NEEDED - $($script:danger) serious finding(s). Don't open affected projects; see docs\after-a-scan\if-danger-found.md" }
 elseif ($script:warn -gt 0) { $verdict = "Clean, $($script:warn) item(s) worth a look" }

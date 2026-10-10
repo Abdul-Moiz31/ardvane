@@ -1,14 +1,14 @@
 // @ts-check
 import { api } from '../api.js';
-import { h, button, pill, switchEl, card, banner, pageHead, busy } from '../dom.js';
+import { h, button, pill, switchEl, choice, card, banner, pageHead, busy } from '../dom.js';
 import { icon } from '../icons.js';
-import { toast, errorText } from '../feedback.js';
+import { toast, errorText, showError } from '../feedback.js';
 import { nextRun } from '../format.js';
 import { S, refresh, rerender } from '../store.js';
 import { setRoutine, setOfflineBanner } from '../actions.js';
 
 export function renderSettings() {
-  return [pageHead('Settings', 'Choose when the daily check runs and what it covers.'), dailyCheck(), folders(), github(), privacy(), about()];
+  return [pageHead('Settings', 'Choose when the daily check runs, what it covers and what the app may fix for you.'), dailyCheck(), folders(), autofixMode(), github(), privacy(), about()];
 }
 
 function dailyCheck() {
@@ -46,6 +46,25 @@ function folders() {
     h('div', { class: 'row' }, input, button('Add folder', add, '', 'plus'),
       s.folders_custom ? button('Reset to defaults', () => saveList(s.default_folders), 'btn-ghost') : null),
     S.folderErr ? h('div', { class: 'err', role: 'alert', text: S.folderErr }) : null));
+}
+
+const FIX_MODES = [
+  ['ask', 'Ask me', 'Each fix shows exactly what will change and waits for you to confirm.', true],
+  ['auto', 'Automatic', 'Safe fixes run as soon as a scan or the daily check finds the problem. You get a summary and can undo any of them.', false],
+  ['off', 'Off', 'Only report problems — you fix everything yourself.', false],
+];
+
+function autofixMode() {
+  const current = S.data.settings.autofix;
+  const pick = (/** @type {string} */ m) => async () => {
+    try { await api('/api/settings', { autofix: m }); await refresh(); toast(`Fixes: ${FIX_MODES.find(x => x[0] === m)[1]}`); } catch (e) { showError(e); }
+  };
+  return card('Fixes', 'check', h('div', { class: 'card-pad stack' },
+    h('div', { class: 'choices choices-3' }, FIX_MODES.map(([m, title, desc, rec]) => choice('radio', current === m, String(title), String(desc), pick(String(m)), false, !!rec))),
+    h('div', { class: 'help' },
+      h('strong', { text: 'Safe to fix automatically: ' }), 'editor auto-run settings, npm install scripts, switched-off git protection, and malware in known malware locations (moved to quarantine, never deleted).',
+      h('br'), h('strong', { text: 'Always asks first: ' }), 'stopping a running process, moving one of your projects, and anything that only might be malware.',
+      h('br'), h('strong', { text: 'Never automatic: ' }), 'anything on GitHub, rotating secrets — those stay in your to-do list.')));
 }
 
 function github() {

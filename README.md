@@ -41,6 +41,7 @@ collaborators. This kit is everything that finally worked, packaged so you don't
 | | |
 |---|---|
 | 🖥️ **Dashboard** | A local app window: status at a glance, scans with live progress, charts, protection switches, your own daily-check time, optional GitHub account check — no terminal needed after the first start |
+| 🔧 **Fixes, with undo** | The app can fix what's safe to fix: editor and npm settings, switched-off protection, malware in known locations (moved to quarantine, never deleted). Ask-first by default, or fully automatic |
 | ✅ **To-do list** | Every finding becomes a checklist of practical steps; a DANGER opens the recovery checklist; fixes are re-checked by the next scan; weekly GitHub-account checks come back on schedule |
 | 🔍 **One-command machine scan** | Read-only check of your whole computer: implants, running malware, startup items, attacker connections, editor settings, every git project and known malicious packages |
 | 🧱 **Safe clone** | `git clone` downloads without writing project files, scans, and **blocks** infected repositories |
@@ -174,7 +175,7 @@ polinrider-survival-kit/
 │   ├── attacks/                each attack explained, with sources
 │   ├── after-a-scan/           incident response, GitHub cleanup, secrets, hardening
 │   └── dashboard.md · checkrepo.md · daily-routine.md · infected-packages.md
-├── scanner/                    detection code: checkrepo, GitHub check, package checker and lists, git hooks, safe clone, tests
+├── scanner/                    detection and fixes: checkrepo, autofix, GitHub check, package checker, lists, git hooks, safe clone, tests
 ├── mac/                        install / uninstall / daily check for macOS and Linux
 └── windows/                    the same for Windows (beta)
 ```

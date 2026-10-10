@@ -20,5 +20,5 @@ SHA-256 hash and a public reference instead.
 
 ## Scope
 
-- `scanner/` (scanner, hooks, safe clone, package lists), `mac/` and `windows/` (installers, daily routine), `app/`, `scan-my-machine.*`
+- `scanner/` (scanner, fixer, hooks, safe clone, lists) — a way to make `autofix.py` move or change something outside its rules is in scope, `mac/` and `windows/` (installers, daily routine), `app/`, `scan-my-machine.*`
 - The guides are best-effort advice; corrections are welcome as normal issues.

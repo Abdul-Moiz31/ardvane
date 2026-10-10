@@ -48,6 +48,18 @@ class ParseEvents(unittest.TestCase):
         self.assertEqual(scanjob.github_section("me", {"error": "offline"})["items"][0]["level"], "warn")
 
 
+class ScanJobHooks(unittest.TestCase):
+    def test_on_finish_runs_after_a_successful_scan(self):
+        calls = []
+        job = scanjob.ScanJob.__new__(scanjob.ScanJob)
+        job.__init__("quick", [], "", on_finish=lambda j: calls.append(j) or [{"title": "x", "ok": True}])
+        deadline = time.time() + 120
+        while job.finished is None and time.time() < deadline:
+            time.sleep(0.2)
+        self.assertEqual(len(calls), 1, "the hook runs once, after the scan")
+        self.assertEqual(job.state()["autofixed"], [{"title": "x", "ok": True}])
+
+
 class Reports(unittest.TestCase):
     def setUp(self):
         os.makedirs(config.SCANS, exist_ok=True)
@@ -138,6 +150,14 @@ class Tasks(unittest.TestCase):
         self.assertEqual(tasks._view("weekly-security-log", data["tasks"]["weekly-security-log"], time.time())["status"], "scheduled")
         self.assertEqual(tasks._view("weekly-security-log", data["tasks"]["weekly-security-log"], time.time() + 8 * 86400)["status"], "open")
 
+    def test_removing_malware_opens_the_recovery_checklist_once(self):
+        tasks.sync([], self.PROTECTION_OFF, set(), now=self.now)
+        tasks.start_incident()
+        tasks.start_incident()
+        data = tasks._load()
+        self.assertEqual(tasks.overview(data)["counts"]["incident_total"], 7)
+        self.assertTrue(all(not data["tasks"][t["id"]]["done_at"] for t in tasks.INCIDENT))
+
     def test_steps_are_validated(self):
         tasks.sync([], self.PROTECTION_OFF, set(), now=self.now)
         tasks.set_step("weekly-access", 1, True)
@@ -151,6 +171,22 @@ class Tasks(unittest.TestCase):
         self.assertEqual(reports.findings("  🛑 found: ~/.n2\n  ⚠️  hosts file has custom entries\n  [CHECK]  x\n  ✅ none"),
                          [("danger", "found: ~/.n2"), ("warn", "hosts file has custom entries"), ("warn", "x")])
         self.assertEqual(tasks.finding("danger", "found: ~/.n2")["key"], scanjob.item("danger", "found: ~/.n2")["key"])
+
+
+class Fixes(unittest.TestCase):
+    def test_modes_match_the_fixer(self):
+        from backend import fixes
+        self.assertEqual(settings.AUTOFIX_MODES, fixes.autofix().MODES)
+        self.assertEqual(settings.load()["autofix"], fixes.autofix().DEFAULT_MODE)
+
+    def test_fix_api_refuses_unknown_ids_and_bad_modes(self):
+        from backend import server
+        with self.assertRaises(server.ApiError):
+            server.post_fix({"id": "path:000000000000"})
+        with self.assertRaises(server.ApiError):
+            server.post_settings({"autofix": "everything"})
+        with self.assertRaises(server.ApiError):
+            server.post_unfix({"id": "nope"})
 
 
 class Docs(unittest.TestCase):

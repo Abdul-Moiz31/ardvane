@@ -24,7 +24,7 @@ The dashboard stops by itself a few minutes after you close its tab. Clicking th
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
-| **Settings** | Daily check time (09:00 by default), which folders are scanned, and the optional GitHub check. |
+| **Settings** | Daily check time (09:00 by default), which folders are scanned, what the app may fix for you, and the optional GitHub check. |
 
 ## The to-do list
 
@@ -44,6 +44,42 @@ Scans tell you what's wrong; the to-do list makes sure something is done about i
 
 The menu shows how many steps are open, and the Overview shows the next three. Progress is saved in
 `~/.checkrepo/tasks.json`. The steps themselves live in `app/backend/tasks_catalog.py`, so adding one is a data change.
+
+## Fixes — let the app do it
+
+Some problems the kit can fix for you. Choose how in **Settings → Fixes**:
+
+| Mode | What happens |
+|---|---|
+| **Ask me** (default) | Each fixable problem gets a **Fix…** button that shows exactly what will change before anything happens. |
+| **Automatic** | Safe fixes run as soon as a scan or the daily check finds the problem. You get a summary and can undo each one. |
+| **Off** | Only report; you fix everything yourself. |
+
+| Fix | Ask me | Automatic |
+|---|---|---|
+| Editor auto-run on / Workspace Trust off | ✅ | ✅ |
+| npm install scripts allowed | ✅ | ✅ |
+| The kit's git hooks switched off | ✅ | ✅ |
+| Malware in a known malware location (`scanner/lists/malware-paths.txt`) | ✅ | ✅ (names marked `ask` in the list always ask) |
+| A malware process that is running | ✅ | asks first |
+| An infected project folder, or a loose script that only *might* be malware | ✅ | asks first |
+| Anything on GitHub, rotating secrets | — | — (stays in your to-do list) |
+
+How it stays safe:
+
+- **Nothing is deleted.** Malware is moved to `~/.checkrepo/quarantine` with a record of where it came from, and made
+  non-executable. It is kept as evidence and can be restored.
+- **Everything can be undone** from **Protection → Fix history**, except stopping a process.
+- **Fixes only act on what the fixer detects itself**: a fixed list of known malware paths, exact malware file names,
+  the settings the kit manages, and project folders that `checkrepo` still flags at the moment of the fix. Paths are
+  never taken from text inside a scanned file. A symlink is moved as a link, never followed. Protected places
+  (`~/.ssh`, keychains, your home folder itself and the like) are refused.
+- **Every fix is checked afterwards.** It only counts as done if the problem is gone.
+- **The recovery checklist still opens.** Removing malware doesn't undo what it already stole, so the to-do list keeps
+  you on the GitHub and secrets steps.
+
+The daily check uses the same fixer (`scanner/autofix.py`) in Automatic mode. You can also run it yourself:
+`python3 scanner/autofix.py list`, then `fix <id>`, `history` or `undo <id>`.
 
 ## The GitHub check (optional)
 
@@ -89,6 +125,7 @@ app/
 │   ├── status.py       read-only protection status
 │   ├── actions.py      runs the kit's install / routine scripts
 │   ├── tasks.py        the to-do list rules · tasks_catalog.py  the steps (data only)
+│   ├── fixes.py        dashboard side of scanner/autofix.py (one implementation for app and daily check)
 │   ├── reports.py · docs.py · settings.py · launcher.py · system.py · config.py · cli.py
 ├── ui/                 plain JavaScript modules, no build step
 │   ├── index.html · app.css

@@ -7,6 +7,7 @@ import { fmtTime, plural } from '../format.js';
 import { ring } from '../charts.js';
 import { S, applyTasks, loadTasks, fileManagerLabel } from '../store.js';
 import { reveal } from '../actions.js';
+import { fixesCard } from '../fixes.js';
 
 /**
  * @typedef {{text: string, link: string, done: boolean}} Step
@@ -26,7 +27,7 @@ export function renderTodo() {
   const head = pageHead('To-do', 'Practical steps from your scans and checks. Tick each one off when you\'ve done it.');
   if (!S.tasks) { loadTasks(); return [head, h('div', { class: 'card' }, skeleton(4))]; }
   const all = /** @type {Task[]} */ (S.tasks.tasks);
-  const out = [head, progress(all)];
+  const out = [head, fixesCard('Fix these first — the app can do it for you'), progress(all)];
   for (const sec of SECTIONS) {
     const items = all.filter(t => t.group === sec.key);
     const open = items.filter(t => t.status === 'open');

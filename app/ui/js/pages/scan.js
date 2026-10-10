@@ -6,6 +6,7 @@ import { donut } from '../charts.js';
 import { S, STEP_NAMES, fileManagerLabel, rerender, INFECTED_GUIDE } from '../store.js';
 import { startScan, cancelScan, reveal, dismiss } from '../actions.js';
 import { openReport } from '../components.js';
+import { fixesCard, autofixedBanner } from '../fixes.js';
 
 export function renderScan() {
   const head = pageHead('Scan', 'Read-only: a scan never changes, deletes or runs anything from your files.');
@@ -103,7 +104,7 @@ function results(sc) {
     h('div', { class: 'grow' }, h('h3', { text: 'Your next steps are in the to-do list' }),
       h('p', { text: 'Every finding has a short checklist. Tick each step off as you go — a later scan tells you if something is still there.' })),
     button('Open to-do', () => { location.hash = '#todo'; }, 'btn-primary', 'checkCircle')) : null;
-  return h('div', { class: 'stack' }, top, next, summary, tools, list);
+  return h('div', { class: 'stack' }, top, autofixedBanner(sc.autofixed), fixesCard(), next, summary, tools, list);
 }
 
 /** @param {string} label @param {string} value */

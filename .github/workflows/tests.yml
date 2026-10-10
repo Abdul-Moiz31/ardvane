@@ -26,6 +26,8 @@ jobs:
         run: python scanner/tests/run_tests.py
       - name: GitHub check (offline tests)
         run: python scanner/tests/test_github_check.py
+      - name: Fixer (quarantine, undo, refusal of protected paths, modes)
+        run: python scanner/tests/test_autofix.py
       - name: Python 3.8 syntax level (scanner, GitHub check, dashboard backend)
         shell: bash
         run: for f in scanner/*.py app/dashboard.py app/backend/*.py; do python -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), feature_version=(3, 8))" "$f" || exit 1; done

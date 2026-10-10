@@ -22,7 +22,6 @@ Repositories already scanned clean are skipped until they receive a new push (re
 Exit code: 0 clean, 1 danger found, 2 warnings only, 3 could not check.
 """
 import datetime
-import importlib.util
 import io
 import json
 import os
@@ -34,21 +33,13 @@ import tempfile
 import urllib.error
 import urllib.request
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kitlib import DEST, load_checkrepo, read_json, safe_output, write_json  # noqa: E402
+
 API = "https://api.github.com"
 MAX_ARCHIVE = 60 * 1024 * 1024
 BURST_REPOS, BURST_WINDOW = 5, 3600
-SEEN_FILE = os.path.expanduser("~/.checkrepo/github-seen.json")
-
-
-def load_checkrepo():
-    for p in (os.path.join(HERE, "checkrepo.py"), os.path.expanduser("~/.checkrepo/checkrepo.py")):
-        if os.path.isfile(p):
-            spec = importlib.util.spec_from_file_location("checkrepo", p)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return mod
-    raise SystemExit("github_check: checkrepo.py not found")
+SEEN_FILE = os.path.join(DEST, "github-seen.json")
 
 
 def gh_login():
@@ -129,21 +120,12 @@ def bursts(times):
 
 
 def load_seen():
-    try:
-        with open(SEEN_FILE, encoding="utf-8") as f:
-            d = json.load(f)
-        return d if isinstance(d, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    return read_json(SEEN_FILE, {})
 
 
 def save_seen(seen):
     try:
-        os.makedirs(os.path.dirname(SEEN_FILE), exist_ok=True)
-        tmp = SEEN_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(seen, f)
-        os.replace(tmp, SEEN_FILE)
+        write_json(SEEN_FILE, seen)
     except OSError:
         pass
 
@@ -210,11 +192,7 @@ def check(user, days=7, max_repos=15, rescan=False):
 
 
 def main(argv):
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    safe_output()
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 0 if argv else 3

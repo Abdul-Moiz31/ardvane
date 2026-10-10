@@ -24,7 +24,7 @@ mkdir -p "$DEST" "$HOME/Library/LaunchAgents"
 cp "$HERE/daily-check.sh" "$DEST/daily-check.sh" && chmod 755 "$DEST/daily-check.sh"
 # fingerprints of the protection files (re-run this script after you update the kit)
 : > "$DEST/fingerprints.txt"
-for f in "$DEST/checkrepo.py" "$DEST/github_check.py" "$DEST/hooks/dispatch" "$DEST/bin/git-safeclone" "$DEST/daily-check.sh"; do
+for f in "$DEST/checkrepo.py" "$DEST/kitlib.py" "$DEST/github_check.py" "$DEST/autofix.py" "$DEST/malware-paths.txt" "$DEST/hooks/dispatch" "$DEST/bin/git-safeclone" "$DEST/daily-check.sh"; do
   [ -f "$f" ] && echo "$(shasum -a 256 "$f" | cut -d' ' -f1) $f" >> "$DEST/fingerprints.txt"
 done
 cat > "$PLIST" <<EOF

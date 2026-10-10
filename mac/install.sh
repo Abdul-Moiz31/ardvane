@@ -53,7 +53,8 @@ run cp "$SCANNER/checkrepo.py" "$DEST/checkrepo.py"
 run cp "$SCANNER/hooks/dispatch" "$DEST/hooks/dispatch"
 run chmod 755 "$DEST/hooks/dispatch"
 run cp "$SCANNER/safeclone/git-safeclone" "$DEST/bin/git-safeclone"
-run cp "$SCANNER/github_check.py" "$DEST/github_check.py"   # optional GitHub check (dashboard Settings)
+for f in kitlib.py github_check.py autofix.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # shared helpers, GitHub check, fixer
+run cp "$SCANNER/lists/malware-paths.txt" "$DEST/malware-paths.txt"
 run chmod 755 "$DEST/bin/git-safeclone"
 if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo"; else
   printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$DEST/checkrepo.py" > "$DEST/bin/checkrepo" && chmod 755 "$DEST/bin/checkrepo" || die "could not create the checkrepo command"

@@ -66,7 +66,7 @@ def github_section(user, result, dismissed=()):
 
 
 class ScanJob:
-    def __init__(self, mode, folders, github_user):
+    def __init__(self, mode, folders, github_user, on_finish=None):
         self.id = secrets.token_hex(6)
         self.mode, self.folders, self.github_user = mode, list(folders), github_user
         self.started, self.finished = time.time(), None
@@ -75,6 +75,8 @@ class ScanJob:
         self.proc = None
         self.cancelled = False
         self.github = None
+        self.on_finish = on_finish
+        self.autofixed = []
         self.lock = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -103,6 +105,9 @@ class ScanJob:
             if self.github_user and not self.cancelled:
                 self.phase = "github"
                 self._run_github()
+            if self.on_finish and not self.cancelled:
+                self.phase = "fixing"
+                self.autofixed = self.on_finish(self) or []
         except OSError as e:
             with open(self.events_file, "a", encoding="utf-8") as f:
                 f.write(f"H\tScan\t\nW\tThe scan could not start: {e}\t\n")
@@ -156,7 +161,7 @@ class ScanJob:
             "id": self.id, "mode": self.mode, "running": running, "cancelled": self.cancelled, "phase": self.phase,
             "started": self.started, "finished": self.finished, "progress": progress, "code": code, "report": report,
             "steps_total": total, "steps_done": max(0, len(sections) - (1 if running else 0)),
-            "sections": sections, "github_user": self.github_user, "folders": self.folders,
+            "sections": sections, "github_user": self.github_user, "folders": self.folders, "autofixed": self.autofixed,
             "danger": sum(1 for i in items if i["level"] == "danger"),
             "warn": sum(1 for i in items if i["level"] == "warn" and not i["dismissed"]),
             "ok": sum(1 for i in items if i["level"] == "ok"),

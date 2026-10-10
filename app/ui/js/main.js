@@ -35,7 +35,7 @@ function render() {
   badge.textContent = String(open);
   badge.classList.toggle('danger', !!(S.data.todo && S.data.todo.danger));
   const target = $('#page-' + page);
-  if (target) target.replaceChildren(...PAGES[page](sub).filter(/** @returns {x is Node} */ x => !!x));
+  if (target) target.replaceChildren(...PAGES[page](sub).filter(Boolean));
 }
 
 setRenderer(render);
