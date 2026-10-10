@@ -1,0 +1,28 @@
+name: release
+
+# Publishes a GitHub release when a new version reaches main and its tests pass.
+# To release: raise VERSION in app/backend/config.py and add a CHANGELOG.md section in a pull request, then merge it.
+# Merges that don't change the version publish nothing (the script sees the release already exists).
+on:
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write          # create the tag and the release; nothing else
+
+jobs:
+  release:
+    # only after the tests passed on a push to main (never for pull requests)
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Release the version in app/backend/config.py if it isn't released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python3 .github/scripts/release.py

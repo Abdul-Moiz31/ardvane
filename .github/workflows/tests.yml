@@ -55,6 +55,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      - name: The version has release notes in CHANGELOG.md
+        run: python3 .github/scripts/release.py --check
       - name: Syntax check every module
         run: for f in app/ui/js/*.js app/ui/js/pages/*.js; do node --check "$f" || exit 1; done
       - name: Type check (JSDoc + @ts-check; CI only, nothing is installed for users)
