@@ -66,7 +66,7 @@ if [ -d "$HOME/Library/Application Support" ] && [ -n "$PY" ]; then
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location("cr", sys.argv[1]); cr = importlib.util.module_from_spec(spec); spec.loader.exec_module(cr)
 t = open(sys.argv[2], encoding="utf-8", errors="replace").read(5_000_000)
-sys.exit(0 if (cr.marker_hits(t) or ("_0x" in t and "while(!![])" in t)) else 1)
+sys.exit(0 if (cr.marker_hits(t) or cr.looks_obfuscated(t)) else 1)
 PYEOF
     then bad "malware script: ${f/#$HOME/~}" "$f"; fi
   done < <(find "$HOME/Library/Application Support" -maxdepth 2 -type f \( -name "*.js" -o -name "*.cjs" -o -name "*.mjs" \) -size +10k 2>/dev/null \
@@ -163,27 +163,25 @@ if [ $QUICK -eq 1 ] || [ -z "$PY" ]; then
   info "skipped"
 else
   repos=0; dn=$danger; wn=$warn
+  # scan_dir DIR LABEL: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
+  scan_dir() {
+    local line where="${1/#$HOME/~}"
+    line="$("$PY" "$CHECKREPO" --summary "$1" 2>/dev/null)"
+    case "${line%% *}" in
+      0) ;;
+      1) printf '\r%80s\r' '' >&2; bad "INFECTED: $2${where} — ${line#* }" "$1" ;;
+      2) printf '\r%80s\r' '' >&2; chk "worth a look: $2${where} — ${line#* }" "$1" ;;
+      *) printf '\r%80s\r' '' >&2; chk "could not scan ${where} (${line#* }) — run: checkrepo \"$where\"" "$1" ;;
+    esac
+  }
   while IFS= read -r g; do
     d="$(dirname "$g")"; repos=$((repos+1))
     printf '\r  scanning %d: %-60.60s' "$repos" "${d/#$HOME/~}" >&2; ev P "$repos ${d/#$HOME/~}"
-    res="$("$PY" "$CHECKREPO" --json "$d" 2>/dev/null)"
-    line="$(printf '%s' "$res" | "$PY" -c 'import json,sys
-try:
-    r=json.load(sys.stdin); print(r["exit"], "; ".join(f[2]+": "+f[3] for f in r["findings"][:3]))
-except Exception: print(-1)')"
-    case "${line%% *}" in
-      1) printf '\r%80s\r' '' >&2; bad "INFECTED: ${d/#$HOME/~} — ${line#* }" "$d" ;;
-      2) printf '\r%80s\r' '' >&2; chk "worth a look: ${d/#$HOME/~} — ${line#* }" "$d" ;;
-    esac
+    scan_dir "$d" ""
   done < <(find "${ROOTS[@]}" -maxdepth 6 \( -name node_modules -o -name Library -o -name .Trash -o -name .cache -o -name .npm -o -name .cargo -o -name .rustup -o -name .gradle -o -name .m2 \) -prune -o -name .git -type d -print 2>/dev/null)
   printf '\r%80s\r' '' >&2
   for dl in "$HOME/Downloads" "$HOME/Desktop"; do
-    [ -d "$dl" ] || continue
-    line="$("$PY" "$CHECKREPO" --json "$dl" 2>/dev/null | "$PY" -c 'import json,sys
-try:
-    r=json.load(sys.stdin); print(r["exit"], "; ".join(f[2]+": "+f[3] for f in r["findings"][:3]))
-except Exception: print(0)')"
-    case "${line%% *}" in 1) bad "INFECTED files in ${dl/#$HOME/~}: ${line#* }" "$dl" ;; 2) chk "worth a look in ${dl/#$HOME/~}: ${line#* }" "$dl" ;; esac
+    [ -d "$dl" ] && scan_dir "$dl" "files in "
   done
   if [ $repos -eq 0 ]; then chk "found 0 git repositories — if your projects live elsewhere, run: bash scan-my-machine.sh /path/to/projects"
   elif [ $danger -eq $dn ] && [ $warn -eq $wn ]; then okay "$repos repositories + Downloads/Desktop scanned — no malware"

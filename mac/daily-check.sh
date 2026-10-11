@@ -84,23 +84,24 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
     if ls "$d" >/dev/null 2>&1; then roots+=("$d")
     else chk "can't read ${d/#$HOME/~} — give /bin/bash Full Disk Access (System Settings › Privacy & Security) so the daily check can scan it"; fi
   done
+  # scan_dir DIR: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
+  scan_dir() {
+    local line where="${1/#$HOME/~}"
+    line="$("$PY" "$DEST/checkrepo.py" --summary "$1" 2>/dev/null)"
+    case "${line%% *}" in
+      0) ;;
+      1) bad "DANGER in $where: ${line#* }" ;;
+      2) chk "worth a look in $where: ${line#* }" ;;
+      *) chk "could not scan $where (${line#* }) — run: checkrepo \"$where\"" ;;
+    esac
+  }
   repos=0
   [ ${#roots[@]} -gt 0 ] && while IFS= read -r g; do
-    d="$(dirname "$g")"; repos=$((repos+1))
-    res="$("$PY" "$DEST/checkrepo.py" --json "$d" 2>/dev/null)"
-    code="$(printf '%s' "$res" | "$PY" -c 'import json,sys
-try: print(json.load(sys.stdin)["exit"])
-except Exception: print(-1)')"
-    detail="$(printf '%s' "$res" | "$PY" -c 'import json,sys
-try: print("; ".join(f[2]+": "+f[3] for f in json.load(sys.stdin)["findings"][:3]))
-except Exception: pass')"
-    case "$code" in 1) bad "DANGER in ${d/#$HOME/~}: $detail" ;; 2) chk "worth a look in ${d/#$HOME/~}: $detail" ;; esac
+    repos=$((repos+1)); scan_dir "$(dirname "$g")"
   done < <(find "${roots[@]}" -maxdepth 5 -name .git -type d -not -path "*/node_modules/*" 2>/dev/null)
   if [ $repos -eq 0 ]; then chk "scanned 0 repositories — nothing was checked. List your project folders in ~/.checkrepo/projects.txt"
   else out "  scanned $repos repositories"; fi
-  [ -d "$HOME/Downloads" ] && [ "$("$PY" "$DEST/checkrepo.py" --json "$HOME/Downloads" 2>/dev/null | "$PY" -c 'import json,sys
-try: print(json.load(sys.stdin)["exit"])
-except Exception: print(0)')" = "1" ] && bad "DANGER in ~/Downloads — run: checkrepo ~/Downloads"
+  [ -d "$HOME/Downloads" ] && scan_dir "$HOME/Downloads"
 else
   chk "checkrepo is not installed — run ../../mac/install.sh"
 fi

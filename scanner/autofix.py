@@ -254,7 +254,7 @@ def detect_scripts():
                     text = f.read(5_000_000)
             except OSError:
                 continue
-            if cr.marker_hits(text) or ("_0x" in text and "while(!![])" in text):
+            if cr.marker_hits(text) or cr.looks_obfuscated(text):
                 out.append(fix("path:" + short(e.path), "quarantine", f"Quarantine {pretty(e.path)}",
                                "A script with this malware's code, hidden among app files.", False, e.path,
                                [f"move {pretty(e.path)} to quarantine (not deleted, can be restored)"]))

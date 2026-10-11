@@ -40,10 +40,14 @@ quarantine() {   # move the download out of the way; Trash first (macOS), else ~
   if [ -d "$HOME/.Trash" ] && mv "$dest" "$HOME/.Trash/$name" 2>/dev/null; then echo "the Trash"; return; fi
   mkdir -p "$HOME/.checkrepo/quarantine" && mv "$dest" "$HOME/.checkrepo/quarantine/$name" && echo "~/.checkrepo/quarantine"
 }
+clone_args=("$@")
 blocked() {
   echo "${RED}CLONE BLOCKED — malware found. $1 The download was moved to $(quarantine).${RST}" >&2
-  printf '   If you are 100%% sure this is a false alarm: command git clone' >&2; printf ' %q' "$@" >&2; echo >&2
+  printf '   If you are 100%% sure this is a false alarm: command git clone' >&2; printf ' %q' "${clone_args[@]}" >&2; echo >&2
   exit 1
+}
+unscanned() {   # exit code 4: the scanner itself failed - never treat that as clean, and never as malware
+  echo "Ardvane: the malware scan could not finish, so this clone was NOT checked. Run: checkrepo \"$dest\"" >&2
 }
 
 # --- 1. clone without checking out any files ---
@@ -54,17 +58,20 @@ git -C "$dest" rev-parse -q --verify HEAD >/dev/null || { echo "(empty repositor
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/safeclone.XXXXXX")"; tmp="$(cd "$tmp" && pwd)"
 # (not `git archive`: a repo could hide files from it via .gitattributes export-ignore)
 git -C "$dest" -c core.fsmonitor=false --work-tree="$tmp" checkout -q -f HEAD -- . 2>/dev/null
-"$PY" "$CHECKREPO" --quiet "$tmp" | sed "s#$tmp#$dest (not unpacked)#"
+# --all-files: every file here is tracked, so committed node_modules/venv folders are scanned too
+"$PY" "$CHECKREPO" --quiet --all-files "$tmp" | sed "s#$tmp#$dest (not unpacked)#"
 rc=${PIPESTATUS[0]}
 rm -rf "$tmp"
-[ "$rc" -eq 1 ] && blocked "No project files were written." "$@"
+[ "$rc" -eq 1 ] && blocked "No project files were written."
+[ "$rc" -eq 4 ] && unscanned
 
 # --- 3. clean -> write the files; with submodules, scan again after they are fetched ---
 git -C "$dest" reset -q --hard HEAD
 if [ $recurse -eq 1 ]; then
   git -C "$dest" submodule update --init --recursive
-  "$PY" "$CHECKREPO" --quiet --include-deps "$dest"; src=$?
-  [ "$src" -eq 1 ] && blocked "A submodule contains malware." "$@"
+  "$PY" "$CHECKREPO" --quiet --all-files "$dest"; src=$?
+  [ "$src" -eq 1 ] && blocked "A submodule contains malware."
+  [ "$src" -eq 4 ] && unscanned
   [ "$src" -eq 2 ] && rc=2
 fi
 [ "$rc" -eq 2 ] && echo "(cloned, but see the warnings above)" >&2
