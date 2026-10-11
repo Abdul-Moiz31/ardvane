@@ -256,7 +256,8 @@ PROJECT_DIR_RE = re.compile(r"^(?:\$\{?(?:CLAUDE_PROJECT_DIR|workspaceFolder|PWD
 # ---------------------------------------------------------------- small helpers
 def load_hashes(path):
     try:
-        return {l.split()[0].lower() for l in open(path) if l.strip() and not l.startswith("#")}
+        with open(path) as f:
+            return {l.split()[0].lower() for l in f if l.strip() and not l.startswith("#")}
     except OSError:
         return set()
 
