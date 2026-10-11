@@ -19,6 +19,17 @@ function Invoke-Native([scriptblock]$Block) {
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { & $Block } finally { $ErrorActionPreference = $old }
 }
+# Scan-Dir DIR: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
+function Scan-Dir($dir) {
+    $line = [string](Invoke-Native { & $py.Exe @($py.Args) "$Dest\checkrepo.py" --summary $dir 2>$null } | Select-Object -First 1)
+    $code, $detail = $line -split ' ', 2
+    switch ($code) {
+        '0' { }
+        '1' { Bad "DANGER in ${dir}: $detail" }
+        '2' { Chk "worth a look in ${dir}: $detail" }
+        default { Chk "could not scan $dir ($detail) - run: checkrepo `"$dir`"" }
+    }
+}
 Add-Line "Ardvane daily check - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"; Add-Line ''
 
 # 1. known malware locations
@@ -83,14 +94,8 @@ if ($py -and (Test-Path "$Dest\checkrepo.py")) {
     if ($roots.Count -gt 0) {
         $repos = @(Get-ChildItem $roots -Directory -Recurse -Depth 4 -Force -Filter '.git' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' })
     }
-    foreach ($g in $repos) {
-        $d = $g.Parent.FullName
-        $json = Invoke-Native { & $py.Exe @($py.Args) "$Dest\checkrepo.py" --json $d 2>$null }
-        $res = $null; try { $res = $json | ConvertFrom-Json } catch { }
-        if (-not $res) { continue }
-        $detail = ($res.findings | Select-Object -First 3 | ForEach-Object { "$($_[2]): $($_[3])" }) -join '; '
-        if ($res.exit -eq 1) { Bad "DANGER in ${d}: $detail" } elseif ($res.exit -eq 2) { Chk "worth a look in ${d}: $detail" }
-    }
+    foreach ($g in $repos) { Scan-Dir $g.Parent.FullName }
+    if (Test-Path "$HOME\Downloads") { Scan-Dir "$HOME\Downloads" }   # loose downloads, e.g. a coding test
     if ($repos.Count -eq 0) { Chk 'scanned 0 repositories - nothing was checked. List your project folders in %USERPROFILE%\.checkrepo\projects.txt' }
     else { Add-Line "  scanned $($repos.Count) repositories" }
 } else { Chk 'checkrepo is not installed - run windows\install.ps1' }

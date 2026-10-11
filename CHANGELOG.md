@@ -3,6 +3,26 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.3.0
+
+**The scanner can't be talked out of a finding any more.** An October 2026 audit tried to sneak malware past it;
+every way that worked is now caught, and covered by a test.
+
+- A file that breaks the analysis (a malformed value, 100,000 nested brackets) is reported as "could not be analysed"
+  instead of stopping the scan. A scanner failure exits with code 4 and is shown as "could not scan" - never as clean,
+  and never as malware.
+- Linked `.vscode` / `.claude` folders and config files are read through the link. Files git ignores are still scanned
+  where editors and AI agents read them (`.vscode`, `.claude`, MCP files, config files, fonts).
+- Fake fonts are recognised by their structure, not just their first bytes: a file starting with `true;`, padded with
+  non-English text or bigger than 2 MB no longer passes as a font.
+- Files too large to read fully are checked at both ends, and big config files are reported instead of skipped.
+- Anything run with `node` that isn't a script (an image, a data file, a preload) is checked as code. Code hidden after
+  line breaks or non-standard spaces, `.VSCode` folders, JSON escapes such as `folder\u004fpen`, comments in MCP
+  config and AI-agent status-line commands are all caught.
+- Named pipes no longer hang a scan.
+- Safe clone now scans committed `node_modules` / `.venv` folders too, and prints the right command for a false alarm.
+- New `checkrepo --summary` for scripts. No new false alarms on 90,000 real project files.
+
 ## 0.2.2
 
 **The GitHub check now sees everything.** It used to stop at your first 100 repositories and skip repositories over

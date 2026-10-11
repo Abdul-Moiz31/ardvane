@@ -33,11 +33,12 @@ case "$name" in
     ;;
   pre-push)
     scan
-    if [ $? -eq 1 ]; then
-      printf '\033[1;31m%s\033[0m\n' "PUSH BLOCKED by malware check. Nothing was sent." >&2
-      echo "   If you are 100% sure this is a false alarm: git push --no-verify" >&2
-      exit 1
-    fi
+    case $? in
+      1) printf '\033[1;31m%s\033[0m\n' "PUSH BLOCKED by malware check. Nothing was sent." >&2
+         echo "   If you are 100% sure this is a false alarm: git push --no-verify" >&2
+         exit 1 ;;
+      4) echo "Ardvane: the malware scan could not finish, so this push was NOT checked." >&2 ;;
+    esac
     ;;
 esac
 

@@ -77,22 +77,25 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     # (not `git archive`: a repo could hide files from it via .gitattributes export-ignore)
     Invoke-Native { & $GitExe -C $dest -c core.fsmonitor=false "--work-tree=$tmp" checkout -q -f HEAD -- . 2>$null | Out-Null }
-    $out = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --quiet $tmp }
+    # --all-files: every file here is tracked, so committed node_modules/venv folders are scanned too
+    $out = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --quiet --all-files $tmp }
     $rc = $LASTEXITCODE
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
 if ($out) { ($out -join "`n").Replace($tmp, "$dest (not unpacked)") | Write-Host }
 if ($rc -eq 1) { Block-Clone 'No project files were written.' }
+if ($rc -eq 4) { Write-Host "Ardvane: the malware scan could not finish, so this clone was NOT checked. Run: checkrepo `"$dest`"" -ForegroundColor Yellow }
 
 # --- 3. clean -> write the files; with submodules, scan again after they are fetched ---
 & $GitExe -C $dest reset -q --hard HEAD
 if ($recurse) {
     & $GitExe -C $dest submodule update --init --recursive
-    $out2 = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --quiet --include-deps $dest }
+    $out2 = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --quiet --all-files $dest }
     $src = $LASTEXITCODE
     if ($out2) { $out2 | Write-Host }
     if ($src -eq 1) { Block-Clone 'A submodule contains malware.' }
+    if ($src -eq 4) { Write-Host 'Ardvane: the submodule scan could not finish, so they were NOT checked.' -ForegroundColor Yellow }
     if ($src -eq 2) { $rc = 2 }
 }
 if ($rc -eq 2) { Write-Host '(cloned, but see the warnings above)' -ForegroundColor Yellow }

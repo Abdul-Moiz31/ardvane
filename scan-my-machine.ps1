@@ -38,6 +38,17 @@ function Invoke-Native([scriptblock]$Block) {
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { & $Block } finally { $ErrorActionPreference = $old }
 }
+# Scan-Dir DIR LABEL: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
+function Scan-Dir($dir, $label = '') {
+    $line = [string](Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --summary $dir 2>$null } | Select-Object -First 1)
+    $code, $detail = $line -split ' ', 2
+    switch ($code) {
+        '0' { }
+        '1' { Bad "INFECTED: $label$dir - $detail" $dir }
+        '2' { Chk "worth a look: $label$dir - $detail" $dir }
+        default { Chk "could not scan $dir ($detail) - run: checkrepo `"$dir`"" $dir }
+    }
+}
 
 $py = $null
 foreach ($c in 'py', 'python', 'python3') {
@@ -136,18 +147,11 @@ if ($Quick -or -not $py) { Info 'skipped' } else {
     foreach ($g in $repos) {
         $i++; $d = $g.Parent.FullName
         Write-Progress -Activity 'Scanning projects' -Status $d -PercentComplete ([int](100 * $i / [Math]::Max(1, $repos.Count))); Ev 'P' "$i $d"
-        $json = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --json $d 2>$null }
-        $res = $null; try { $res = $json | ConvertFrom-Json } catch { }
-        if (-not $res) { continue }
-        $detail = ($res.findings | Select-Object -First 3 | ForEach-Object { "$($_[2]): $($_[3])" }) -join '; '
-        if ($res.exit -eq 1) { Bad "INFECTED: $d - $detail" $d } elseif ($res.exit -eq 2) { Chk "worth a look: $d - $detail" $d }
+        Scan-Dir $d
     }
     Write-Progress -Activity 'Scanning projects' -Completed
     foreach ($dl in "$HOME\Downloads", "$HOME\Desktop") {
-        if (-not (Test-Path $dl)) { continue }
-        $json = Invoke-Native { & $py.Exe @($py.Args) $Checkrepo --json $dl 2>$null }
-        $res = $null; try { $res = $json | ConvertFrom-Json } catch { }
-        if ($res -and $res.exit -eq 1) { Bad "INFECTED files in ${dl}" $dl } elseif ($res -and $res.exit -eq 2) { Chk "worth a look in ${dl}" $dl }
+        if (Test-Path $dl) { Scan-Dir $dl 'files in ' }
     }
     if ($repos.Count -eq 0) { Chk 'found 0 git repositories - if your projects live elsewhere, run: .\scan-my-machine.ps1 D:\path\to\projects' }
     elseif ($script:danger -eq $dn -and $script:warn -eq $wn) { Okay "$($repos.Count) repositories + Downloads/Desktop scanned - no malware" }
