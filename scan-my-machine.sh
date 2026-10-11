@@ -40,13 +40,14 @@ info() { say "  ${D}$1${X}"; ev I "$1"; }
 head1() { say ""; say "${B}$1${X}"; ev H "$1"; }
 : > "$REPORT"
 
+# Python: the one the Ardvane app runs on (ARDVANE_PYTHON), the one the installer recorded, then the PATH
 PY=""
-for c in python3 python; do
-  command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1 && { PY="$c"; break; }
+for c in "${ARDVANE_PYTHON:-}" "$(cat "$HOME/.checkrepo/python" 2>/dev/null)" python3 python; do
+  [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1 && { PY="$c"; break; }
 done
 
 say "${B}Ardvane — machine scan${X}  ${D}$(date '+%Y-%m-%d %H:%M') · read-only · $OS${X}"
-[ -n "$PY" ] || say "${Y}Python 3.8+ not found — project and package scans will be skipped (macOS: xcode-select --install)${X}"
+[ -n "$PY" ] || say "${Y}Python 3.8+ not found — project and package scans will be skipped (macOS: brew install python)${X}"
 
 # ------------------------------------------------------------------ 1. known malware locations
 head1 "1. Known malware locations"

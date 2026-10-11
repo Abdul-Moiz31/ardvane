@@ -16,7 +16,7 @@ import time
 
 from . import actions, detections
 from .config import IS_WIN, KIT, SCANS
-from .system import NO_WINDOW, python_exe, run, short_hash
+from .system import NO_WINDOW, kit_env, python_exe, run, short_hash
 
 MACHINE_STEPS = ["Known malware locations", "Running processes", "Programs that start automatically",
                  "Shell startup files and hosts file", "Connections to known attacker servers",
@@ -112,7 +112,7 @@ class ScanJob:
                     self.feed_note = f"Couldn't update detections ({e.__class__.__name__})"
                 self.phase = "machine"
             os.makedirs(SCANS, exist_ok=True)
-            env = dict(os.environ, SCAN_EVENTS=self.events_file, SCAN_REPORT_DIR=SCANS)
+            env = kit_env(SCAN_EVENTS=self.events_file, SCAN_REPORT_DIR=SCANS)
             group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | NO_WINDOW} if IS_WIN else {"start_new_session": True})
             p = self._start(self._machine_command(), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **group)
             if p:

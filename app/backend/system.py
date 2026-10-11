@@ -35,6 +35,12 @@ def python_exe():
     return sys.executable or shutil.which("python3") or "python3"
 
 
+def kit_env(**extra):
+    """Environment for the kit's own scripts. ARDVANE_PYTHON hands them the Python this app runs on: started from the
+    app icon, macOS gives the app a minimal PATH on which `python3` may be missing, and the scripts look there."""
+    return dict(os.environ, ARDVANE_PYTHON=python_exe(), **extra)
+
+
 def read_json(path, default):
     """JSON from a file, or `default` when it's missing, unreadable or of a different type."""
     try:

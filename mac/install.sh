@@ -41,11 +41,13 @@ echo
 # ---------------------------------------------------------------- prerequisites
 if [ "$(uname)" = "Darwin" ]; then HINT="install them with: xcode-select --install"; else HINT="install them with your package manager (e.g. sudo apt install git python3)"; fi
 command -v git >/dev/null || die "git is not installed — $HINT"
+# Python: the one the Ardvane app runs on first (ARDVANE_PYTHON - started from the app icon, the PATH can be too short
+# to find any), then the one recorded by an earlier install, then python3 / python on the PATH.
 PY=""
-for c in python3 python; do
-  command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1 && { PY="$(command -v "$c")"; break; }
+for c in "${ARDVANE_PYTHON:-}" "$(cat "$DEST/python" 2>/dev/null)" python3 python; do
+  [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1 && { PY="$(command -v "$c")"; break; }
 done
-[ -n "$PY" ] || die "Python 3.8+ is required — $HINT"
+[ -n "$PY" ] || die "Python 3.8+ was not found. Install it (macOS: brew install python, or: xcode-select --install) and run this again"
 ok "git and $("$PY" --version 2>&1) found"
 
 # ---------------------------------------------------------------- files
@@ -58,6 +60,7 @@ for f in kitlib.py github_check.py autofix.py feed.py ed25519.py safeinstall.py;
 run cp "$SCANNER/lists/malware-paths.txt" "$DEST/malware-paths.txt"
 run chmod 755 "$DEST/bin/git-safeclone"
 if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo and ~/.checkrepo/bin/safe-install"; else
+  printf '%s\n' "$PY" > "$DEST/python"     # the daily check runs from launchd with a minimal PATH: it reads this
   for cmd in checkrepo:checkrepo.py safe-install:safeinstall.py; do
     printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$DEST/${cmd#*:}" > "$DEST/bin/${cmd%%:*}" && chmod 755 "$DEST/bin/${cmd%%:*}" || die "could not create the ${cmd%%:*} command"
   done

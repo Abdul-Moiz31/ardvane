@@ -3,6 +3,14 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.3.1
+
+- **"Update protection" works when Ardvane is opened from its app icon.** macOS gives apps started from an icon a
+  minimal PATH, so the installer couldn't find Python ("Python 3.8+ is required") even though Ardvane itself was
+  running on it. The app now hands every script it starts the Python it runs on, the installer records it, and the
+  daily check uses that recorded Python too, so machine scans and daily checks no longer skip project checks for the
+  same reason. The message for a missing Python now gives the right fix.
+
 ## 0.3.0
 
 **The scanner can't be talked out of a finding any more.** An October 2026 audit tried to sneak malware past it;
