@@ -9,10 +9,11 @@
 #   hooks\*                            global git hooks (Git for Windows runs them with its bundled bash)
 #   bin\safeclone.ps1                  safe `git clone` for PowerShell (profile function)
 #   bin\git-safeclone                  safe `git clone` for Git Bash (~/.bashrc function)
+#   safeinstall.py, bin\safe-install   safe npm / npx / pnpm / yarn / bun / pip installs (PowerShell + Git Bash functions)
 # and hardens: npm ignore-scripts=true, VS Code / Cursor / Windsurf (automatic tasks off, Workspace Trust on).
 # Undo: .\windows\uninstall.ps1
 
-param([switch]$DryRun, [switch]$NoNpm, [switch]$NoEditor, [switch]$NoSafeClone, [switch]$ForceHooks)
+param([switch]$DryRun, [switch]$NoNpm, [switch]$NoEditor, [switch]$NoSafeClone, [switch]$NoSafeInstall, [switch]$ForceHooks)
 
 $ErrorActionPreference = 'Stop'
 $Scanner = Join-Path (Split-Path -Parent $PSScriptRoot) 'scanner'
@@ -52,19 +53,22 @@ foreach ($c in @('py', 'python', 'python3')) {
 }
 if (-not $py) { Write-Host 'Python 3.8+ is required: https://www.python.org/downloads/ (tick "Add python.exe to PATH")' -ForegroundColor Red; exit 1 }
 Ok "git and Python found ($($py.Exe))"
+# how the commands, profiles and Git Bash call Python: by name, not a full path, so it works whatever characters
+# your user folder contains
+$pyCall = if ($py.Name -eq 'py') { 'py -3' } else { $py.Name }
 
 $policy = Get-ExecutionPolicy -Scope CurrentUser
 if ($policy -in @('Undefined', 'Restricted', 'AllSigned') -and (Get-ExecutionPolicy) -in @('Restricted', 'AllSigned')) {
-    Warn "PowerShell is set to block profile scripts ($((Get-ExecutionPolicy))). Safe clone in PowerShell needs:"
+    Warn "PowerShell is set to block profile scripts ($((Get-ExecutionPolicy))). Safe clone and safe install in PowerShell need:"
     Warn "    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"
-    Warn "  (without it, new PowerShell windows show an error loading your profile). Git Bash safe clone works either way."
+    Warn "  (without it, new PowerShell windows show an error loading your profile). Git Bash works either way."
 }
 
 # ---------------------------------------------------------------- files
 Do-It 'copy scanner, hooks and safe-clone into %USERPROFILE%\.checkrepo' {
     New-Item -ItemType Directory -Force -Path "$Dest\bin", "$Dest\hooks" | Out-Null
     Copy-Item "$Scanner\checkrepo.py" "$Dest\checkrepo.py" -Force
-    foreach ($f in 'kitlib.py', 'github_check.py', 'autofix.py', 'feed.py', 'ed25519.py') { Copy-Item "$Scanner\$f" "$Dest\$f" -Force }   # helpers, GitHub check, fixer, signed detection feed
+    foreach ($f in 'kitlib.py', 'github_check.py', 'autofix.py', 'feed.py', 'ed25519.py', 'safeinstall.py') { Copy-Item "$Scanner\$f" "$Dest\$f" -Force }   # helpers, GitHub check, fixer, signed detection feed, safe install
     Copy-Item "$Scanner\lists\malware-paths.txt" "$Dest\malware-paths.txt" -Force
     Copy-Item "$Scanner\safeclone\git-safeclone" "$Dest\bin\git-safeclone" -Force
     Copy-Item "$PSScriptRoot\safeclone.ps1" "$Dest\bin\safeclone.ps1" -Force
@@ -73,9 +77,8 @@ Do-It 'copy scanner, hooks and safe-clone into %USERPROFILE%\.checkrepo' {
              'proc-receive','post-receive','post-update','push-to-checkout','pre-auto-gc','post-rewrite','sendemail-validate'
     $dispatch = ([IO.File]::ReadAllText("$Scanner\hooks\dispatch")) -replace "`r`n", "`n"      # hooks must have LF line endings
     foreach ($h in @('dispatch') + $hooks) { [IO.File]::WriteAllText("$Dest\hooks\$h", $dispatch, $Utf8NoBom) }   # copies: symlinks need admin
-    # call Python by command name (not a full path) so the .cmd works whatever characters your user folder contains
-    $pyCall = if ($py.Name -eq 'py') { 'py -3' } else { $py.Name }
     [IO.File]::WriteAllText("$Dest\bin\checkrepo.cmd", "@$pyCall `"%USERPROFILE%\.checkrepo\checkrepo.py`" %*`r`n", (New-Object System.Text.ASCIIEncoding))
+    [IO.File]::WriteAllText("$Dest\bin\safe-install", "#!/bin/sh`nexec $pyCall `"`$HOME/.checkrepo/safeinstall.py`" `"`$@`"`n", (New-Object System.Text.ASCIIEncoding))   # for Git Bash
     Get-ChildItem $Dest -Recurse -File | Unblock-File -ErrorAction SilentlyContinue   # files from a downloaded zip carry a "blocked" mark
 }
 Ok 'scanner installed in %USERPROFILE%\.checkrepo'
@@ -103,25 +106,41 @@ if (-not $current -or $current -eq $ours -or $ForceHooks) {
     Warn "  e.g. in your pre-push hook:  ~/.checkrepo/hooks/pre-push `"`$@`" || exit 1"
 }
 
-# ---------------------------------------------------------------- safe clone (PowerShell + Git Bash)
+# ---------------------------------------------------------------- shell setup: safe clone + safe install (PowerShell, Git Bash)
+# One marked block per profile holds both; whatever you switched off is left out.
+$safeTools = 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'bunx', 'pip', 'pip3'   # as in scanner/shell/safe-install.sh (a test keeps them equal)
+$psParts = @()
+$bashParts = @("export PATH=`"`$HOME/.checkrepo/bin:`$PATH`"",
+               "checkrepo() { py -3 `"`$HOME/.checkrepo/checkrepo.py`" `"`$@`" 2>/dev/null || python `"`$HOME/.checkrepo/checkrepo.py`" `"`$@`"; }")
 if (-not $NoSafeClone) {
-    $psBlock = @"
-$Begin
+    $psParts += @"
 # safe clone: scans before writing project files (bypass once with: git.exe clone ...)
 function git {
     `$real = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
     if (`$args.Count -gt 0 -and `$args[0] -eq 'clone') { & "`$HOME\.checkrepo\bin\safeclone.ps1" @(`$args | Select-Object -Skip 1) }
     else { & `$real @args }
 }
-$End
 "@
-    Do-It "add safe-clone function to $PROFILE" { Set-Block $PROFILE $psBlock }
-    $bashBlock = "$Begin`nexport PATH=`"`$HOME/.checkrepo/bin:`$PATH`"`n" +
-                 "checkrepo() { py -3 `"`$HOME/.checkrepo/checkrepo.py`" `"`$@`" 2>/dev/null || python `"`$HOME/.checkrepo/checkrepo.py`" `"`$@`"; }`n" +
-                 "function git { if [ `"`$1`" = `"clone`" ]; then shift; bash `"`$HOME/.checkrepo/bin/git-safeclone`" `"`$@`"; else command git `"`$@`"; fi; }`n$End"
-    Do-It 'add safe-clone function and checkrepo command to ~/.bashrc (Git Bash)' { Set-Block (Join-Path $HOME '.bashrc') $bashBlock -Lf }
-    Ok 'safe clone on for PowerShell and Git Bash (cmd.exe, `gh repo clone` and GUI clones get the post-clone warning instead)'
+    $bashParts += "function git { if [ `"`$1`" = `"clone`" ]; then shift; bash `"`$HOME/.checkrepo/bin/git-safeclone`" `"`$@`"; else command git `"`$@`"; fi; }"
 }
+if (-not $NoSafeInstall) {
+    # Python decides what installs (so `npm run dev` passes straight through) and exits 10 only to block.
+    $psParts += @"
+# safe install: npm / npx / pnpm / yarn / bun / pip check packages for known malware before installing them.
+# Bypass once, only if you are sure: run the tool's own file, e.g.  npm.cmd install ...
+function Test-ArdvaneSafeInstall { & $pyCall "`$HOME\.checkrepo\safeinstall.py" @args; `$LASTEXITCODE -ne 10 }
+function Invoke-ArdvaneTool(`$tool, `$rest) {
+    `$real = Get-Command `$tool -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not `$real) { Write-Error "`$tool is not installed"; return }
+    if (Test-ArdvaneSafeInstall `$tool @rest) { & `$real.Source @rest }
+}
+"@ + "`n" + (($safeTools | ForEach-Object { "function $_ { Invoke-ArdvaneTool '$_' `$args }" }) -join "`n")
+    $bashParts += ([IO.File]::ReadAllText("$Scanner\shell\safe-install.sh") -replace "`r`n", "`n").TrimEnd()
+}
+if ($psParts.Count -gt 0) { Do-It "update $PROFILE" { Set-Block $PROFILE ("$Begin`n" + ($psParts -join "`n") + "`n$End") } }
+Do-It 'update ~/.bashrc (Git Bash)' { Set-Block (Join-Path $HOME '.bashrc') ("$Begin`n" + ($bashParts -join "`n") + "`n$End") -Lf }
+if (-not $NoSafeClone) { Ok 'safe clone on for PowerShell and Git Bash (cmd.exe, `gh repo clone` and GUI clones get the post-clone warning instead)' }
+if (-not $NoSafeInstall) { Ok 'safe install on: npm, npx, pnpm, yarn, bun and pip check packages for known malware first (in new windows)' }
 
 # ---------------------------------------------------------------- npm
 if (-not $NoNpm) {

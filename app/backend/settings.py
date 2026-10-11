@@ -53,6 +53,7 @@ def load():
         "github_user": str(s.get("github_user") or ""),
         "github_repos": _valid_repos(s.get("github_repos")),
         "feed_updates": s.get("feed_updates") is not False,              # on unless turned off
+        "package_lookups": s.get("package_lookups") is not False,        # safe install asks OSV.dev too (on unless off)
         "dismissed": [d for d in s.get("dismissed", []) if isinstance(d, str)][-MAX_DISMISSED:],
     }
 

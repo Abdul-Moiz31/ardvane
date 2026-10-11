@@ -42,6 +42,17 @@ every way that worked is now caught, and covered by a test.
 - Settings changes are saved one at a time and lists change by "add" / "remove", so quick clicks or a second tab can
   no longer lose a change.
 
+**Safe install: malicious packages are stopped before they install.**
+
+- `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` now check every package an install would add - for npm the full
+  dependency tree, worked out in a private copy of the project without running anything - against Ardvane's list and
+  OSV.dev's database of malicious packages. A known-malicious package means nothing is installed.
+- Only public package names are sent to OSV.dev (never private-registry packages), answers are cached, and the online
+  check can be turned off under Settings → Detections. Everyday commands like `npm run dev` pass straight through, and
+  a failure of the check never stops your package manager.
+- One shell file holds the functions for macOS/Linux and Git Bash; PowerShell gets the same. The Protection page shows
+  whether safe install is on.
+
 **Detections that keep up between releases.**
 
 - Before each scan and daily check, Ardvane downloads a signed list of new detections - attacker servers and IPs,

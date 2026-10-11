@@ -135,14 +135,22 @@ function detections() {
         h('div', { class: 'title', text: f ? `Detection list from ${f.published}` : 'No detection list downloaded yet' }),
         h('div', { class: 'help', text: f ? `${f.count} detections added to the ones built in.` : 'Only the built-in detections are used until the first update.' })),
       updateBtn),
-    h('p', { class: 'help', text: 'Every update is checked against Ardvane\'s signing key before it is used, an older list is never accepted, and it can only add detections - never remove any, or change your files. It is one download from GitHub; nothing about this computer is sent.' })), toggle);
+    h('p', { class: 'help', text: 'Every update is checked against Ardvane\'s signing key before it is used, an older list is never accepted, and it can only add detections - never remove any, or change your files. It is one download from GitHub; nothing about this computer is sent.' }),
+    h('div', { class: 'divider' }),
+    h('div', { class: 'row' },
+      h('div', { class: 'grow' }, h('div', { class: 'title', text: 'Check packages online before they install' }),
+        h('div', { class: 'help', text: 'Safe install also asks OSV.dev (Google\'s open database, which includes the OpenSSF list of malicious packages) about the packages an install would add. It covers many more packages than Ardvane\'s own list and learns new ones within hours. Only public package names and versions are sent - never packages from a private registry. Off: Ardvane\'s own list only.' })),
+      switchEl(s.package_lookups, async (/** @type {Event} */ e) => {
+        const on = /** @type {HTMLInputElement} */ (e.target).checked;
+        try { await api('/api/settings', { package_lookups: on }); await refresh(); toast(on ? 'Packages are also checked online' : 'Packages are checked against Ardvane\'s list only'); } catch (err) { showError(err); }
+      }, 'Check packages online before they install'))), toggle);
 }
 
 function privacy() {
   return card('Privacy', 'lock', h('div', { class: 'card-pad' }, h('ul', { class: 'help' },
     h('li', { text: 'Runs only on this computer. The dashboard is served from 127.0.0.1 and refuses requests from other websites.' }),
     h('li', { text: 'No account, no telemetry, no tracking. Reports stay in ~/.checkrepo/reports.' }),
-    h('li', { text: 'The only internet connections are to GitHub: downloading the signed detection list (unless turned off under Detections), and its API while the GitHub check is on or repositories are listed.' }),
+    h('li', { text: 'Internet connections: GitHub, to download the signed detection list and for the GitHub check; and OSV.dev, to look up public package names when you install packages. Both can be turned off under Detections and GitHub.' }),
     h('li', { text: 'Scans only read files. Nothing is changed unless you press a button that says so.' }))));
 }
 

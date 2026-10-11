@@ -85,6 +85,8 @@ export function protectionRows(compact) {
       status(p.installed && p.hooks), !p.installed ? button('Turn on', () => installFlow(), 'btn-sm btn-primary') : null),
     row('terminal', p.safeclone, 'Safe clone in the terminal', 'git clone checks a repository before any of its files are written to your disk.',
       status(p.safeclone), !p.safeclone ? turnOn('Turn on') : null),
+    row('package', p.safeinstall, 'Safe install', 'npm, npx, pnpm, yarn, bun and pip check every package against known malware before it installs, and stop if one is.',
+      status(p.safeinstall), !p.safeinstall ? turnOn('Turn on') : null),
     row('package', p.npm !== false, 'Block npm install scripts', 'Packages can\'t run code while they install. Allow it for one trusted project with npm install --ignore-scripts=false.',
       p.npm === null ? pill('neutral', 'npm not installed') : status(p.npm), p.npm === false ? turnOn('Turn on') : null),
   ];

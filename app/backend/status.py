@@ -60,8 +60,8 @@ def editors():
     return result
 
 
-def safeclone():
-    """Is the installer's safe-clone block present in a shell profile?"""
+def in_shell_profile(token):
+    """Is `token` inside the installer's marked block in one of your shell profiles?"""
     profiles = [os.path.join(HOME, n) for n in (".zshrc", ".bashrc", ".bash_profile")]
     if IS_WIN:
         docs = os.path.join(HOME, "Documents")
@@ -73,7 +73,7 @@ def safeclone():
                 text = f.read()
         except OSError:
             continue
-        if RC_MARKER in text and "safeclone" in text:
+        if RC_MARKER in text and token in text:
             return True
     return False
 
@@ -119,7 +119,8 @@ def _protection():
         "up_to_date": installed and sha256(os.path.join(DEST, "checkrepo.py")) == sha256(os.path.join(KIT, "scanner", "checkrepo.py")),
         "hooks": hooks,
         "hooks_other": hooks_path if hooks_path and not hooks else "",
-        "safeclone": safeclone(),
+        "safeclone": in_shell_profile("safeclone"),
+        "safeinstall": in_shell_profile("ArdvaneSafeInstall") or in_shell_profile("__ardvane_safe_install"),
         "npm": npm_scripts_blocked(),
         "editors": editors(),
         "routine": routine(),
