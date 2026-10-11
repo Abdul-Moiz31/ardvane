@@ -3,6 +3,11 @@ name: release
 # Publishes a GitHub release when a new version reaches main and its tests pass.
 # To release: raise VERSION in app/backend/config.py and add a CHANGELOG.md section in a pull request, then merge it.
 # Merges that don't change the version publish nothing (the script sees the release already exists).
+#
+# Supply chain: every release carries a reproducible source archive signed with GitHub's build provenance
+# (Sigstore). Only this workflow, running on main, can produce that signature, and the Homebrew tap refuses any
+# archive without it - so a stolen token that creates a release or pushes a tag can't ship code to brew users.
+# Third-party actions are pinned to full commit hashes.
 on:
   workflow_run:
     workflows: [tests]
@@ -10,40 +15,77 @@ on:
     branches: [main]
 
 permissions:
-  contents: write          # create the tag and the release; nothing else
+  contents: read
+
+concurrency:
+  group: release          # one release at a time; a second merge waits instead of racing
+  cancel-in-progress: false
 
 jobs:
   release:
     # only after the tests passed on a push to main (never for pull requests)
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the tag, the release and its source-archive asset
+      id-token: write       # sign the archive's build provenance
+      attestations: write   # store that signature on GitHub
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
       - name: Release the version in app/backend/config.py if it isn't released yet
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: python3 .github/scripts/release.py
+      - name: Build the source archive of the released commit (same commit, same bytes)
+        if: steps.release.outputs.needs_archive == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          git fetch -q --depth=1 origin "$COMMIT"
+          mkdir -p dist
+          git archive --format=tar --prefix="ardvane-$VERSION/" "$COMMIT" | gzip -n -9 > "dist/ardvane-$VERSION.tar.gz"
+          sha256sum dist/*
+      - name: Sign where it was built
+        if: steps.release.outputs.needs_archive == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/ardvane-*.tar.gz
+      - name: Attach it to the release
+        if: steps.release.outputs.needs_archive == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: gh release upload "v$VERSION" "dist/ardvane-$VERSION.tar.gz" --repo "$GITHUB_REPOSITORY"
 
   pypi:
     # `pipx install ardvane`: publish the same version to PyPI, once. Trusted publishing: PyPI checks that the upload
-    # comes from this workflow in this repository, so no password or token is stored anywhere.
+    # comes from this workflow in this repository, so no password or token is stored anywhere. Built from the release
+    # tag, so PyPI always gets exactly the released code, even when this job is re-run after later merges.
     needs: release
+    if: needs.release.outputs.version != ''
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write      # proves to PyPI which workflow is uploading
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: refs/tags/v${{ needs.release.outputs.version }}
+          persist-credentials: false
       - name: Build the package unless this version is already on PyPI
         id: build
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          VERSION="$(python3 .github/scripts/release.py --version)"
           if curl -sf "https://pypi.org/pypi/ardvane/$VERSION/json" > /dev/null; then
             echo "ardvane $VERSION is already on PyPI"; echo "publish=false" >> "$GITHUB_OUTPUT"
           else
@@ -51,4 +93,4 @@ jobs:
           fi
       - name: Publish to PyPI
         if: steps.build.outputs.publish == 'true'
-        uses: pypa/gh-action-pypi-publish@v1.14.2
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

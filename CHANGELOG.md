@@ -32,6 +32,15 @@ every way that worked is now caught, and covered by a test.
   or removed, a protection file deleted, a repository switching hooks off for itself (Husky folders are fine), and
   the shell setup being removed.
 
+**Releases can't be faked.**
+
+- Every release carries a reproducible source archive signed with GitHub's build provenance. Only the release
+  workflow running on `main` can produce that signature, and the Homebrew tap now refuses any release without it -
+  so a stolen token that creates a release or pushes a tag can't ship code to brew users.
+- A release is refused if its version is older than the latest one, or if its tag already exists on another commit.
+  PyPI is built from the release tag, releases never run twice at once, and every GitHub Action is pinned to an
+  exact commit.
+
 ## 0.2.2
 
 **The GitHub check now sees everything.** It used to stop at your first 100 repositories and skip repositories over
