@@ -109,6 +109,7 @@ and on Windows (beta) the matching `.ps1` files in `windows/`.
 | ⚙️ **Hardens your tools** | VS Code / Cursor can't auto-run code when you open a folder; npm packages can't run install scripts |
 | 🔧 **Fixes, with undo** | Fixes what's safe to fix (editor and npm settings, switched-off protection, malware in known locations), **ask first** by default or **automatic** if you choose. Malware is quarantined, never deleted |
 | ✅ **To-do list** | Every finding becomes a short checklist; a real infection opens the recovery checklist; a later scan checks that your fix worked |
+| 🤖 **GitHub Action** | The same scanner on every push and pull request, and every branch every night, for teammates and branches nobody opens locally: `uses: Abdul-Moiz31/ardvane@v0.3.0` ([how](docs/github-action.md)) |
 | 📦 **Safe install** | `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` check every package an install would add against known malware (Ardvane's list plus OSV.dev's malicious-package database) and stop if one is |
 | ☀️ **Daily check** | Runs at the time you choose, notices if malware switched your protection off, and shows a notification |
 | 🐙 **GitHub check** *(optional)* | Warns about many repos pushed at once and scans recently pushed repos, plus every branch of any repos you list (yours, your organization's, a teammate's). Your token stays in the GitHub CLI |

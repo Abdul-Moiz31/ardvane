@@ -1,0 +1,53 @@
+name: Ardvane malware scan
+description: Find malware that spreads through code (PolinRider / Contagious Interview and similar) in your repository. Read-only - nothing is ever run.
+author: Abdul Moiz
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  mode:
+    description: >-
+      `checkout` (default): scan the checked-out code, for every push and pull request - findings appear on the files.
+      `all-branches`: scan every branch of this repository (and of `repositories`) through the GitHub API - use it on
+      a schedule, because the worm hides in branches nobody opens.
+    default: checkout
+  fail-on:
+    description: Fail the job on `danger` (default), on `warning` as well, or `never`.
+    default: danger
+  repositories:
+    description: >-
+      all-branches only: more repositories to scan, one per line (owner/name or a github.com link) - for example every
+      repository of your organization. The token must be able to read them.
+    default: ""
+  token:
+    description: Token for the GitHub API (all-branches mode). The default token reads this repository only.
+    default: ${{ github.token }}
+  update-detections:
+    description: Fetch Ardvane's signed detection list first (`true`), or use the built-in detections only (`false`).
+    default: "true"
+
+outputs:
+  danger:
+    description: Number of serious findings (malware).
+    value: ${{ steps.scan.outputs.danger }}
+  warnings:
+    description: Number of findings worth a look.
+    value: ${{ steps.scan.outputs.warnings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Scan with Ardvane
+      id: scan
+      shell: bash
+      # Inputs reach the scanner as environment variables only - never pasted into this script.
+      env:
+        ARDVANE_MODE: ${{ inputs.mode }}
+        ARDVANE_FAIL_ON: ${{ inputs.fail-on }}
+        ARDVANE_REPOS: ${{ inputs.repositories }}
+        ARDVANE_UPDATE: ${{ inputs.update-detections }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        py="$(command -v python3 || command -v python)" || { echo "::error title=Ardvane::Python 3.8+ is needed on the runner"; exit 2; }
+        "$py" "$GITHUB_ACTION_PATH/scanner/ci.py"

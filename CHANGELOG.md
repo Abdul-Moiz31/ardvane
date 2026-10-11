@@ -42,6 +42,14 @@ every way that worked is now caught, and covered by a test.
 - Settings changes are saved one at a time and lists change by "add" / "remove", so quick clicks or a second tab can
   no longer lose a change.
 
+**A GitHub Action: the scanner on GitHub's servers.**
+
+- `uses: Abdul-Moiz31/ardvane@v0.3.0` scans every push and pull request: malware fails the check and shows up on the
+  exact file. With `mode: all-branches` on a schedule it scans every branch through the GitHub API, plus any other
+  repositories you list, such as your whole organization. See docs/github-action.md.
+- Read-only, needs only `contents: read`, and file names from the scanned repository can't inject workflow commands.
+  Ardvane's own CI runs the Action on itself.
+
 **Safe install: malicious packages are stopped before they install.**
 
 - `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` now check every package an install would add - for npm the full

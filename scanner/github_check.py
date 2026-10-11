@@ -70,16 +70,22 @@ class RateLimited(RuntimeError):
     """GitHub refuses further requests for now: stop the whole check instead of failing repo by repo."""
 
 
+CI_LOGIN = "(token)"     # gh has a token but no user, e.g. GitHub Actions' GITHUB_TOKEN
+
+
 def gh_login():
-    """The login `gh` is authenticated as, or None (not installed / not logged in)."""
+    """The login `gh` is authenticated as; CI_LOGIN when it has a token that can't name a user (GitHub Actions'
+    GITHUB_TOKEN can read repositories but not /user); None when gh is missing or not logged in."""
     exe = shutil.which("gh")
     if not exe:
         return None
     try:
         r = subprocess.run([exe, "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=20)
-        return r.stdout.strip() or None if r.returncode == 0 else None
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
     except Exception:
         return None
+    return CI_LOGIN if os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") else None
 
 
 class Client:
