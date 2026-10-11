@@ -16,7 +16,8 @@ set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
 DEST="$HOME/.checkrepo"; mkdir -p "$DEST/reports"
 REPORT="$DEST/reports/$(date +%Y-%m-%d).txt"
-PY=""; for c in python3 python; do command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys' 2>/dev/null && { PY="$c"; break; }; done
+# Python: the one the installer recorded (launchd's PATH is minimal), the app's (ARDVANE_PYTHON), then the PATH
+PY=""; for c in "$(cat "$DEST/python" 2>/dev/null)" "${ARDVANE_PYTHON:-}" python3 python; do [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null && { PY="$c"; break; }; done
 danger=0; warn=0
 out() { echo "$*" >> "$REPORT"; }
 bad() { danger=$((danger+1)); out "  🛑 $*"; }

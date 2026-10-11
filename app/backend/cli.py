@@ -15,7 +15,7 @@ import subprocess
 from . import actions, launcher
 from .config import APP_NAME, IDLE_LIMIT, INSTALLED, INSTANCE, KIT, VERSION
 from .server import App, Handler
-from .system import python_exe, read_json, write_private
+from .system import kit_env, python_exe, read_json, write_private
 
 PROG = "ardvane" if INSTALLED else "python3 app/dashboard.py"
 USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads through code. Runs only on this computer.
@@ -104,7 +104,7 @@ def serve(open_browser=True, port=0):
 def _call(cmd):
     """Run one of the kit's own scripts in this terminal and return its exit code."""
     try:
-        return subprocess.call(cmd)
+        return subprocess.call(cmd, env=kit_env())
     except KeyboardInterrupt:
         return 130
     except OSError as e:

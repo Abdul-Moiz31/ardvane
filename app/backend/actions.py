@@ -7,7 +7,7 @@ import shutil
 import threading
 
 from .config import HOME, IS_MAC, IS_WIN, KIT
-from .system import powershell, powershell_command, run
+from .system import kit_env, powershell, powershell_command, run
 
 _picker_lock = threading.Lock()
 PICKER_PROMPT = "Choose a folder with your projects"
@@ -32,14 +32,14 @@ def installer_command(action, dry_run=False):
 
 def installer(action, dry_run=False):
     """Run the installer and capture its output (for the dashboard). Returns (exit code, output)."""
-    return run(installer_command(action, dry_run), timeout=600)
+    return run(installer_command(action, dry_run), timeout=600, env=kit_env())
 
 
 def set_routine(on, at="09:00"):
     if IS_WIN:
-        return powershell(os.path.join(KIT, "windows", "install-routine.ps1"), *(["-At", at] if on else ["-Remove"]), timeout=120)
+        return powershell(os.path.join(KIT, "windows", "install-routine.ps1"), *(["-At", at] if on else ["-Remove"]), timeout=120, env=kit_env())
     if IS_MAC:
-        return run(["bash", os.path.join(KIT, "mac", "install-routine.sh")] + ([at] if on else ["--remove"]), timeout=120)
+        return run(["bash", os.path.join(KIT, "mac", "install-routine.sh")] + ([at] if on else ["--remove"]), timeout=120, env=kit_env())
     return 1, ("The scheduled daily check is available on macOS and Windows. On Linux, add this line with `crontab -e`:\n"
                f"0 9 * * * bash {os.path.join(KIT, 'scan-my-machine.sh')} --quick")
 
