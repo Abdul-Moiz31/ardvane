@@ -1,0 +1,9 @@
+{
+  "_about": "Ardvane's detection feed: indicators added here reach every Ardvane install within a day, without an upgrade. Add entries in a pull request with a link to the public report they come from (see feed/README.md). The feed workflow signs and publishes this file when it changes on main.",
+  "hashes": [],
+  "hosts": [],
+  "ips": [],
+  "markers": [],
+  "npm": [],
+  "pypi": []
+}

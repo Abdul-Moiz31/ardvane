@@ -3,8 +3,10 @@
 import { h, pill, button, linkButton, empty, skeleton } from './dom.js';
 import { icon } from './icons.js';
 import { fmtTime } from './format.js';
-import { S } from './store.js';
+import { S, refresh } from './store.js';
 import { installFlow } from './actions.js';
+import { api } from './api.js';
+import { toast, errorText } from './feedback.js';
 
 /** @param {string} level */
 export function levelPill(level) {
@@ -20,6 +22,25 @@ export function tile(label, value, foot, ic, visual) {
   return h('div', { class: 'card tile' + (visual ? ' tile-visual' : '') },
     h('div', { class: 'grow' }, h('div', { class: 'tile-label' }, icon(ic), label), h('div', { class: 'tile-value', text: value }), h('div', { class: 'tile-foot', text: foot })),
     visual || null);
+}
+
+/**
+ * A removable list (project folders, GitHub repositories): one row per item with an × button.
+ * @param {string[]} items @param {string} ic @param {(item: string) => void} onRemove
+ */
+export function chipList(items, ic, onRemove) {
+  return h('div', { class: 'chips' }, items.map(item => h('div', { class: 'chip' }, icon(ic), h('span', { class: 'mono', text: item }),
+    button('', () => onRemove(item), 'btn-sm btn-ghost', 'x', { 'aria-label': 'Remove ' + item, title: 'Remove' }))));
+}
+
+/**
+ * Change a saved list in Settings. Sends only the change ({add} / {remove}) or a whole new list, so a page showing an
+ * out-of-date list can't drop entries. Returns the error text, or '' when saved.
+ * @param {string} key 'folders' | 'github_repos' @param {string[]|{add: string}|{remove: string}} change @param {string} done
+ */
+export async function changeList(key, change, done) {
+  try { await api('/api/settings', { [key]: change }); await refresh(); toast(done); return ''; }
+  catch (e) { return errorText(e); }
 }
 
 /** @param {number} [limit] */
@@ -64,6 +85,8 @@ export function protectionRows(compact) {
       status(p.installed && p.hooks), !p.installed ? button('Turn on', () => installFlow(), 'btn-sm btn-primary') : null),
     row('terminal', p.safeclone, 'Safe clone in the terminal', 'git clone checks a repository before any of its files are written to your disk.',
       status(p.safeclone), !p.safeclone ? turnOn('Turn on') : null),
+    row('package', p.safeinstall, 'Safe install', 'npm, npx, pnpm, yarn, bun and pip check every package against known malware before it installs, and stop if one is.',
+      status(p.safeinstall), !p.safeinstall ? turnOn('Turn on') : null),
     row('package', p.npm !== false, 'Block npm install scripts', 'Packages can\'t run code while they install. Allow it for one trusted project with npm install --ignore-scripts=false.',
       p.npm === null ? pill('neutral', 'npm not installed') : status(p.npm), p.npm === false ? turnOn('Turn on') : null),
   ];

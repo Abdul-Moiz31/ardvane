@@ -32,6 +32,38 @@ every way that worked is now caught, and covered by a test.
   or removed, a protection file deleted, a repository switching hooks off for itself (Husky folders are fine), and
   the shell setup being removed.
 
+**Scan any GitHub repository, not only your account.**
+
+- **Settings → GitHub → Repositories to scan:** add repositories one by one (yours, your organization's, a
+  teammate's) as `owner/name`, a github.com link or a `git@github.com:` address, and remove them like folders. Every
+  branch of each one is scanned with each scan and daily check. A repository that can't be checked shows as a
+  warning, never as clean.
+- `ardvane check-github owner/name` scans every branch of repositories from the terminal, without cloning them.
+- Settings changes are saved one at a time and lists change by "add" / "remove", so quick clicks or a second tab can
+  no longer lose a change.
+
+**Safe install: malicious packages are stopped before they install.**
+
+- `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` now check every package an install would add - for npm the full
+  dependency tree, worked out in a private copy of the project without running anything - against Ardvane's list and
+  OSV.dev's database of malicious packages. A known-malicious package means nothing is installed.
+- Only public package names are sent to OSV.dev (never private-registry packages), answers are cached, and the online
+  check can be turned off under Settings → Detections. Everyday commands like `npm run dev` pass straight through, and
+  a failure of the check never stops your package manager.
+- One shell file holds the functions for macOS/Linux and Git Bash; PowerShell gets the same. The Protection page shows
+  whether safe install is on.
+
+**Detections that keep up between releases.**
+
+- Before each scan and daily check, Ardvane downloads a signed list of new detections - attacker servers and IPs,
+  malware fingerprints, code markers, malicious npm and PyPI packages - so it recognises new variants without an
+  upgrade. Settings → Detections shows the list you have and can turn updates off; `ardvane update-detections` updates
+  from the terminal.
+- The list is used only with Ardvane's Ed25519 signature (verified by the app itself, no dependencies), only if newer
+  than the copy you have, and it can only add detections. A failed update keeps the last good copy.
+- Indicator matching now looks each finding up instead of trying every pattern, so a large list doesn't slow scans
+  down; the package checker and the scanner share one implementation.
+
 **Releases can't be faked.**
 
 - Every release carries a reproducible source archive signed with GitHub's build provenance. Only the release

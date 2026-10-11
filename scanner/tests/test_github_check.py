@@ -182,6 +182,70 @@ class EdgeCases(unittest.TestCase):
             gc.gh_error("", 1)
 
 
+class Repositories(unittest.TestCase):
+    """Repositories named one by one (Settings > GitHub > Repositories to scan, or --repo)."""
+
+    def test_names_urls_and_ssh_addresses(self):
+        for text in ("octo/hello", " octo/hello ", "https://github.com/octo/hello", "https://github.com/octo/hello.git",
+                     "http://www.github.com/octo/hello/", "https://github.com/octo/hello/tree/main/src",
+                     "https://github.com/octo/hello?tab=readme#top", "git@github.com:octo/hello.git",
+                     "ssh://git@github.com/octo/hello"):
+            self.assertEqual(gc.parse_repo(text), "octo/hello", text)
+        self.assertEqual(gc.parse_repo("Inroad-Ai/inroad-api"), "Inroad-Ai/inroad-api")
+        self.assertEqual(gc.parse_repo("a/my.repo_name-2"), "a/my.repo_name-2")
+
+    def test_anything_else_is_refused(self):
+        for text in ("", "octo", "octo/", "/hello", "octo/hello/extra", "https://gitlab.com/octo/hello", "octo/hello world",
+                     "-octo/hello", "octo/..", "octo/.", "../../etc/passwd", "octo/hello;rm -rf ~", "a" * 40 + "/x"):
+            with self.assertRaises(ValueError, msg=text):
+                gc.parse_repo(text)
+
+    def test_arguments(self):
+        o = gc.parse_args(["--repo", "octo/hello", "--repo", "https://github.com/OCTO/hello", "--repo", "a/b", "--json"])
+        self.assertEqual((o["user"], o["repos"], "--json" in o["flags"]), ("", ["octo/hello", "a/b"], True))
+        o = gc.parse_args(["@me", "--days", "30", "--repo", "a/b"])
+        self.assertEqual((o["user"], o["days"], o["repos"]), ("me", 30, ["a/b"]))
+        for bad in ([], ["--json"], ["--repo"], ["--repo", "nope"], ["me", "--days", "0"], ["bad/name"]):
+            with self.assertRaises(ValueError, msg=bad):
+                gc.parse_args(bad)
+        self.assertEqual(gc.main(["--repo", "not a repo"]), 3)
+
+    def test_listed_repositories_are_scanned_on_every_branch(self):
+        repos = {"octo/clean": {"full_name": "octo/clean", "pushed_at": "2026-01-02T00:00:00Z", "size": 10, "default_branch": "main"},
+                 "Octo/Old": {"full_name": "Octo/Old", "pushed_at": "2026-01-01T00:00:00Z", "size": 10, "default_branch": "main"}}
+        branches = {"octo/clean": [{"name": "main"}, {"name": "dev"}], "Octo/Old": [{"name": "main"}]}
+
+        class FakeClient:
+            truncated = []
+
+            def get(self, path, limit=0):
+                name = path[len("/repos/"):]
+                if name.lower() == "octo/old":
+                    return repos["Octo/Old"]
+                if name not in repos:
+                    raise RuntimeError("gh: Not Found (HTTP 404)")
+                return repos[name]
+
+            def get_all(self, path):
+                return branches[path.split("/repos/")[1].rsplit("/branches", 1)[0]]
+
+        scanned = []
+        original = gc.scan_branch
+        gc.scan_branch = lambda client, cr, repo, branch, result, maybe_empty=False: scanned.append((repo, branch)) or "clean"
+        try:
+            result = {"scanned": ["someone/else"], "branches_scanned": 0, "findings": [], "notes": [], "listed": []}
+            seen = {"Octo/Old": "2026-01-01T00:00:00Z|all"}                    # clean on every branch since its last push
+            gc.check_listed(FakeClient(), None, ["octo/clean", "octo/old", "octo/missing", "someone/else"], False, result, seen)
+        finally:
+            gc.scan_branch = original
+        self.assertEqual(scanned, [("octo/clean", "main"), ("octo/clean", "dev")])
+        self.assertEqual([(r["repo"], r["outcome"], r["branches"]) for r in result["listed"]],
+                         [("octo/clean", "clean", 2), ("Octo/Old", "unchanged", 0), ("octo/missing", "error", 0),
+                          ("someone/else", "scanned above", 0)])
+        self.assertEqual(result["findings"], [["WARNING", "octo/missing", "not scanned: not found, or your GitHub login can't see it"]])
+        self.assertEqual(seen["octo/clean"], "2026-01-02T00:00:00Z|all")
+
+
 @unittest.skipIf(os.name == "nt", "uses a POSIX shell script as a stand-in for gh")
 class Download(unittest.TestCase):
     """download() through a fake `gh` that writes a given number of bytes, then exits with a given code."""

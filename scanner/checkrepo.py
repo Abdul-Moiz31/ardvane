@@ -96,10 +96,11 @@ MARKER_STRINGS = [
 ]
 C2_IPS = ['136.0.9.8', '150.251.113.223', '154.91.0.103', '166.88.134.62', '166.88.134.75', '166.88.134.82', '166.88.4.2', '166.88.54.158', '166.88.73.46', '179.43.166.242', '181.214.149.147', '181.214.149.148', '188.43.33.249', '193.247.144.38', '195.201.194.107', '198.105.127.210', '202.155.8.173', '23.27.120.142', '23.27.13.135', '23.27.13.43', '23.27.20.187', '23.27.202.27', '45.137.198.133', '91.218.183.174']
 # All known-bad package names in one pass: "node_modules/<name>", "<name>":, <name>@<ver> — never part of another name
-BAD_PKG_RE = None  # built after MALICIOUS_NPM below
-
-# IPs only count when they stand alone (not part of a version number like 1.136.0.9.8)
-C2_IP_RE = re.compile(r"(?<![\d.])(?:" + "|".join(re.escape(i) for i in C2_IPS) + r")(?![\d.])")
+C2_IP_SET = set(C2_IPS)
+# Indicators are pulled out of a file once and looked up in a set, so matching costs the same for 20 entries or
+# 20,000 (the detection feed can be large). IPs only count when they stand alone (not inside a version like 1.136.0.9.8).
+IPV4_RE = re.compile(r"(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])")
+HOST_TOKEN_RE = re.compile(r"(?:[a-z0-9-]{1,63}\.)+[a-z]{2,24}", re.I)
 
 MALICIOUS_NPM = {
     "@hoteldev/common", "@nasddatax/common", "@nasdtickets/common", "@rentwise/common", "@simplipayng/checkout", "@uw010010/vite-tree",
@@ -119,10 +120,44 @@ MALICIOUS_NPM = {
     "ts-logger-pack", "uibabai",
 }
 
-# Matches "node_modules/<name>", "<name>":, <name>@<ver>, npm aliases "npm:<name>@", pnpm v6 keys "/<name>@" —
-# never a longer name that merely contains <name> (e.g. "@acme/<name>" or "<name>-extra").
-BAD_PKG_RE = re.compile(r'(?:node_modules/|npm:|(?m:^)[ \t]*/|(?<![\w@/.-]))('
-                        + "|".join(re.escape(n) for n in sorted(MALICIOUS_NPM, key=len, reverse=True)) + r')(?=["\'@:\s])')
+# Package names in a lockfile: "node_modules/<name>", "<name>":, <name>@<ver>, npm aliases "npm:<name>@", pnpm v6 keys
+# "/<name>@". Each match is a whole name, so "@acme/<name>" or "<name>-extra" never count as <name>.
+PKG_TOKEN_RE = re.compile(r'(?:node_modules/|npm:|(?m:^)[ \t]*/|(?<![\w@/.~-]))((?:@[\w.~-]+/)?[\w.~-]+)(?=["\'@:\s])')
+
+
+# Malicious PyPI packages (PEP 503 names: lower case, - for any run of - _ .). Kept equal to lists/pypi.txt by the
+# self-test; the detection feed adds more.
+MALICIOUS_PYPI = {
+    "pybitjs", "pyservercheck",
+}
+
+
+def npm_names_in(text):
+    """Known-malicious npm packages named in a lockfile or manifest."""
+    return {m.group(1) for m in PKG_TOKEN_RE.finditer(text)} & MALICIOUS_NPM
+
+
+def _load_feed():
+    """The signed detection feed (feed.py): new indicators between releases. Added to the built-in ones above, never
+    replacing them. None without a valid feed - or with ARDVANE_NO_FEED set (the self-test runs on built-ins only)."""
+    if os.environ.get("ARDVANE_NO_FEED"):
+        return None
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import feed
+        return feed.cached()
+    except Exception:            # no feed module next to this file, or an unreadable feed: built-in indicators only
+        return None
+
+
+FEED = _load_feed()
+FEED_HOSTS = set(FEED["hosts"]) if FEED else set()
+if FEED:
+    KNOWN_HASHES |= set(FEED["hashes"])
+    MARKER_STRINGS += [m for m in FEED["markers"] if m not in MARKER_STRINGS]
+    C2_IP_SET |= set(FEED["ips"])
+    MALICIOUS_NPM |= set(FEED["npm"])
+    MALICIOUS_PYPI |= set(FEED["pypi"])
 
 # ---------------------------------------------------------------- file classes
 SKIP_DIRS = {".git", "node_modules", "bower_components", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache"}
@@ -462,11 +497,21 @@ def settings_risks(text):
     return bool(AUTO_TASKS_RE.search(text)), bool(TRUST_OFF_RE.search(text)), [text] if FOLDER_OPEN_RE.search(text) else []
 
 
+def feed_host(domain):
+    """The feed host that `domain` is, or is a subdomain of (api.evil.example matches evil.example), else None."""
+    labels = domain.lower().split(".")
+    return next((h for h in (".".join(labels[i:]) for i in range(len(labels) - 1)) if h in FEED_HOSTS), None)
+
+
 def marker_hits(text):
     hits = [m.group(0)[:40] for m in MARKER_RE.finditer(text)][:3]
-    m = C2_IP_RE.search(text)
-    if m:
-        hits.append(m.group(0))
+    ip = next((i for i in IPV4_RE.findall(text) if i in C2_IP_SET), None)
+    if ip:
+        hits.append(ip)
+    if FEED_HOSTS:
+        host = next(filter(None, (feed_host(m.group(0)) for m in HOST_TOKEN_RE.finditer(text))), None)
+        if host:
+            hits.append(host)
     for s in MARKER_STRINGS:
         if s in text:
             hits.append(s)
@@ -768,7 +813,7 @@ class Scan:
 
     def lockfile(self, rel, text):
         # names appear as "node_modules/<name>", "<name>": , <name>@<version>, '<name>@ - never as part of another name
-        hits = sorted(set(m.group(1) for m in BAD_PKG_RE.finditer(text)))
+        hits = sorted(npm_names_in(text))
         if hits:
             self.add("DANGER", "malicious-package", rel, "lockfile installs known malicious package: " + ", ".join(hits[:3]))
 
@@ -874,7 +919,7 @@ def summary(code, findings, error=""):
 
 def main(argv):
     if "--version" in argv:
-        print("checkrepo", VERSION)
+        print("checkrepo", VERSION, "+ detection feed #%s (%s)" % (FEED["sequence"], FEED["published"]) if FEED else "(built-in indicators only)")
         return EXIT_CLEAN
     if "--help" in argv or "-h" in argv:
         print(__doc__)
@@ -908,7 +953,8 @@ def main(argv):
     warn = [f for f in s.findings if f[0] == "WARNING"]
     code = EXIT_DANGER if danger else (EXIT_WARNING if warn else EXIT_CLEAN)
     if as_json:
-        print(json.dumps({"root": root, "exit": code, "findings": s.findings}))
+        print(json.dumps({"root": root, "exit": code, "findings": s.findings,
+                          "feed": {"sequence": FEED["sequence"], "published": FEED["published"]} if FEED else None}))
         return code
     if as_summary:
         print(summary(code, danger + warn))

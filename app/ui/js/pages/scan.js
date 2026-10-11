@@ -3,7 +3,7 @@ import { h, button, pill, choice, switchEl, banner, empty, card, pageHead, busy 
 import { icon } from '../icons.js';
 import { fmtTime, duration, plural } from '../format.js';
 import { donut } from '../charts.js';
-import { S, STEP_NAMES, fileManagerLabel, rerender, INFECTED_GUIDE } from '../store.js';
+import { S, STEP_NAMES, fileManagerLabel, rerender, INFECTED_GUIDE, githubLabel } from '../store.js';
 import { startScan, cancelScan, reveal, dismiss } from '../actions.js';
 import { openReport } from '../components.js';
 import { fixesCard, autofixedBanner } from '../fixes.js';
@@ -18,9 +18,11 @@ export function renderScan() {
 function setup() {
   const o = S.scanOpts, set = S.data.settings;
   const pick = (/** @type {() => void} */ fn) => () => { fn(); rerender(); };
-  const ghDesc = set.github_user
-    ? (set.gh ? 'Recently pushed repositories, including private ones (through the GitHub CLI).' : 'Recently pushed public repositories.')
-    : h('span', {}, 'Add your username in ', h('a', { href: '#settings', text: 'Settings' }), ' first.');
+  const gh = githubLabel(set.github_user, set.github_repos);
+  const covers = [set.github_user ? 'recently pushed repositories' : '', set.github_repos.length ? 'every branch of the repositories you listed' : ''].filter(Boolean).join(', and ');
+  const ghDesc = gh
+    ? covers.charAt(0).toUpperCase() + covers.slice(1) + (set.gh ? ' (private ones too when you are logged in to the GitHub CLI).' : ' (public repositories only).')
+    : h('span', {}, 'Add your username or repositories in ', h('a', { href: '#settings', text: 'Settings' }), ' first.');
   const body = h('div', { class: 'card-pad stack' },
     h('h3', { text: 'Type' }),
     h('div', { class: 'choices' },
@@ -33,8 +35,7 @@ function setup() {
         pick(() => { o.where = 'folders'; }), o.mode === 'quick')),
     h('h3', { text: 'Also check' }),
     h('div', { class: 'choices' },
-      choice('checkbox', !!(o.github && set.github_user), set.github_user ? `GitHub account @${set.github_user}` : 'GitHub account', ghDesc,
-        pick(() => { o.github = !o.github; }), !set.github_user)),
+      choice('checkbox', !!(o.github && gh), gh ? `GitHub: ${gh}` : 'GitHub', ghDesc, pick(() => { o.github = !o.github; }), !gh)),
     h('div', { class: 'row' }, h('div', { class: 'spacer' }),
       button(o.mode === 'quick' ? 'Start quick scan' : 'Start full scan', () => startScan(), 'btn-primary btn-lg', 'play')));
   return card(S.scan ? 'Scan again' : 'New scan', 'radar', body);
@@ -42,7 +43,8 @@ function setup() {
 
 /** @param {import('../store.js').Scan} sc */
 function progress(sc) {
-  const names = STEP_NAMES.concat(sc.github_user ? ['GitHub account'] : []);
+  const gh = githubLabel(sc.github_user, sc.github_repos || []);
+  const names = STEP_NAMES.concat(gh ? ['GitHub'] : []);
   const current = sc.phase === 'github' ? names.length - 1 : Math.max(0, sc.sections.length - 1);
   const steps = h('div', { class: 'steps' }, names.map((name, i) => {
     const sec = sc.sections[i];
@@ -53,7 +55,7 @@ function progress(sc) {
   }));
   const bar = h('div');
   bar.style.width = Math.max(4, Math.round(100 * current / names.length)) + '%';
-  const now = sc.phase === 'github' ? `Checking GitHub @${sc.github_user}…` : sc.progress ? `Scanning project ${sc.progress}` : `${names[current]}…`;
+  const now = sc.phase === 'feed' ? 'Updating detections…' : sc.phase === 'github' ? `Checking GitHub: ${gh}…` : sc.progress ? `Scanning project ${sc.progress}` : `${names[current]}…`;
   const cancel = button('Cancel', () => busy(cancel, cancelScan), 'btn-sm', 'stop');
   return card(`${sc.mode === 'quick' ? 'Quick' : 'Full'} scan in progress`, 'radar',
     h('div', { class: 'card-pad stack' },
@@ -85,7 +87,8 @@ function results(sc) {
     `${passedSections}/${sc.sections.length}`, 'checks passed'),
     h('div', { class: 'summary-facts' },
       fact('Type', sc.mode === 'quick' ? 'Quick scan' : 'Full scan'), fact('Started', fmtTime(sc.started)),
-      fact('Took', duration(sc.started, sc.finished || undefined)), fact('GitHub', sc.github_user ? '@' + sc.github_user : 'not included'),
+      fact('Took', duration(sc.started, sc.finished || undefined)), fact('GitHub', githubLabel(sc.github_user, sc.github_repos || []) || 'not included'),
+      fact('Detections', sc.feed || 'built-in (feed updates are off)'),
       sc.report ? h('div', {}, button('Open full report', () => openReport('scan:' + String(sc.report).split(/[\\/]/).pop()), 'btn-sm', 'file')) : null)));
 
   const list = h('div', { class: 'card' });

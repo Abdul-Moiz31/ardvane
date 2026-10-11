@@ -30,6 +30,12 @@ jobs:
         run: python scanner/tests/test_autofix.py
       - name: Git hooks (push scans the commits being pushed, never the working folder)
         run: python scanner/tests/test_hooks.py
+      - name: Safe install (what each command installs, offline OSV stand-in, the shell functions)
+        run: python scanner/tests/test_safeinstall.py
+      - name: Detection feed (signatures, strict content checks, no rollback) and its source file
+        run: |
+          python scanner/tests/test_feed.py
+          python .github/scripts/build_feed.py --check
       - name: Python 3.8 syntax level (scanner, GitHub check, dashboard backend)
         shell: bash
         run: for f in scanner/*.py app/dashboard.py app/backend/*.py; do python -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), feature_version=(3, 8))" "$f" || exit 1; done

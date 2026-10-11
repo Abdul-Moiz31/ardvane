@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, docs, fixes, launcher, reports, settings, status, tasks
+from . import actions, detections, docs, fixes, launcher, reports, settings, status, tasks
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
 from .scanjob import ScanJob
 
@@ -73,9 +73,11 @@ def get_state(q):
     protection = status.protection()
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
-            "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"], "folders": folders,
+            "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
+                         "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
+                         "package_lookups": s["package_lookups"], "folders": folders,
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
-            "scan": App.scan_state(s["dismissed"])}
+            "feed": detections.status(), "scan": App.scan_state(s["dismissed"])}
 
 
 def get_scan(q):
@@ -122,12 +124,14 @@ def post_scan(b):
         if not os.path.isdir(p):
             raise ApiError(400, f"folder not found: {f}")
         folders.append(p)
-    user = ""
+    user, repos = "", []
     if b.get("github"):
-        user = settings.load()["github_user"]
-        if not user:
-            raise ApiError(400, "add your GitHub username in Settings first")
-    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, on_finish=_after_scan)
+        s = settings.load()
+        user, repos = s["github_user"], s["github_repos"]
+        if not user and not repos:
+            raise ApiError(400, "add your GitHub username or a repository in Settings first")
+    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, repos, on_finish=_after_scan,
+                      update_feed=settings.load()["feed_updates"])
     return {"scan": App.job.state()}
 
 
@@ -197,9 +201,8 @@ def post_dismiss(b):
     key = str(b.get("key", ""))
     if not re.fullmatch(r"[0-9a-f]{16}", key):
         raise ApiError(400, "bad key")
-    s = settings.load()
-    settings.set_dismissed(s, key, not b.get("undo"))
-    settings.save(s)
+    with settings.editing() as s:
+        settings.set_dismissed(s, key, not b.get("undo"))
     return {"ok": True}
 
 
@@ -216,13 +219,16 @@ def post_task(b):
             if resolution == "mine":             # "it's mine" is only for warnings, and also hides them in results
                 if view["group"] != "finding" or view["level"] != "warn":
                     raise ApiError(400, "only warnings can be marked as yours")
-                s = settings.load()
-                settings.set_dismissed(s, tid[2:], True)
-                settings.save(s)
+                with settings.editing() as s:
+                    settings.set_dismissed(s, tid[2:], True)
             tasks.set_done(tid, bool(b.get("done", True)), resolution)
     except (KeyError, ValueError, TypeError):
         raise ApiError(404, "task not found")
     return task_list()
+
+
+def post_feed_update(b):
+    return detections.update()
 
 
 def post_pick_folder(b):
@@ -230,23 +236,26 @@ def post_pick_folder(b):
 
 
 def post_settings(b):
-    s = settings.load()
+    """Lists ("github_repos", "folders") take a whole list, {"add": item} or {"remove": item}."""
     try:
-        if "github_user" in b:
-            s["github_user"] = settings.clean_github_user(b["github_user"])
-        if "github_enabled" in b:
-            s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
-        if "autofix" in b:
-            if b["autofix"] not in settings.AUTOFIX_MODES:
-                raise ValueError("unknown fix mode")
-            s["autofix"] = b["autofix"]
-        if "folders" in b:
-            if not isinstance(b["folders"], list):
-                raise ValueError("folders must be a list")
-            settings.save_folders(b["folders"])
+        with settings.editing() as s:
+            if "github_user" in b:
+                s["github_user"] = settings.clean_github_user(b["github_user"])
+            if "github_repos" in b:
+                s["github_repos"] = settings.change_list(s["github_repos"], b["github_repos"], settings.clean_github_repos)
+            if "github_enabled" in b:
+                s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
+            for key in ("feed_updates", "package_lookups"):     # on/off switches
+                if key in b:
+                    s[key] = bool(b[key])
+            if "autofix" in b:
+                if b["autofix"] not in settings.AUTOFIX_MODES:
+                    raise ValueError("unknown fix mode")
+                s["autofix"] = b["autofix"]
+            if "folders" in b:
+                settings.save_folders(settings.change_list(settings.load_folders()[0], b["folders"], settings.clean_folders))
     except ValueError as e:
         raise ApiError(400, str(e))
-    settings.save(s)
     return {"ok": True}
 
 
@@ -297,7 +306,7 @@ def post_quit(b):
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
               "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
-               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/settings": post_settings,
+               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit}
 
 

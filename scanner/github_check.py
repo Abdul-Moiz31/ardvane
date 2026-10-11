@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""github_check — read-only check of a GitHub account for PolinRider-style activity.
+"""github_check — read-only check of a GitHub account, or of chosen repositories, for PolinRider-style activity.
 
 Part of Ardvane (MIT License). Python 3.8+, no dependencies.
 
@@ -9,6 +9,8 @@ What it does (never changes anything on GitHub):
   3. Downloads the default branch (or, with --all-branches, every branch) of each recently pushed repository as an
      archive into a temporary folder, scans it with checkrepo, and deletes the temporary folder. Nothing from the
      archive is ever run.
+  4. Repositories named with --repo (yours or anyone's you can read) are scanned on every branch, however long ago
+     they were pushed.
 
 Access:
   - If the GitHub CLI (`gh`) is installed and logged in, it is used, so private repositories are checked too.
@@ -17,6 +19,8 @@ Access:
 
 Usage:
   github_check.py USERNAME [--days N] [--max-repos N] [--all-branches] [--json] [--rescan]
+  github_check.py [USERNAME] --repo OWNER/NAME [--repo ...] [--json] [--rescan]
+      a repository can be given as owner/name, a github.com URL or a git@github.com: address
 
 Limits: every repository of the account is listed (all pages). An archive holds only the latest files of one branch,
 not the history, so it is much smaller than the repository size GitHub shows. Archives are streamed to a temporary file
@@ -31,14 +35,15 @@ import datetime
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-import unicodedata
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -339,13 +344,104 @@ def seen_ok(seen, repo, all_branches):
     return v == repo["pushed_at"] + "|all" or (not all_branches and v == repo["pushed_at"])
 
 
-def check(user, days=7, max_repos=15, rescan=False, all_branches=False):
+USER_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
+REPO_NAME_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}")
+GITHUB_PREFIX_RE = re.compile(r"^(?:https?://(?:www\.)?github\.com/|(?:ssh://)?git@github\.com[:/])", re.I)
+
+
+def parse_repo(text):
+    """'owner/name' from owner/name, a github.com URL (any page of the repository) or a git@github.com: address.
+    Raises ValueError for anything else - this is also what the dashboard uses to check what you type."""
+    raw = str(text).strip()
+    rest = GITHUB_PREFIX_RE.sub("", raw)
+    parts = rest.split("?", 1)[0].split("#", 1)[0].strip("/").split("/")
+    if len(parts) < 2 or (rest == raw and len(parts) != 2):    # a URL may go deeper (…/tree/main), a name may not
+        raise ValueError(f"'{raw}' is not a GitHub repository (use owner/name or its github.com link)")
+    name = parts[0] + "/" + re.sub(r"\.git$", "", parts[1], flags=re.I)
+    if not REPO_NAME_RE.fullmatch(name) or parts[1] in (".", ".."):
+        raise ValueError(f"'{raw}' is not a GitHub repository (use owner/name or its github.com link)")
+    return name
+
+
+def scan_repo(client, cr, repo, all_branches, result, seen):
+    """Scan one repository - its default branch, or every branch - and remember it if clean.
+    Returns "clean", "found" or "error". Raises RateLimited, which ends the whole check."""
+    name = repo["full_name"]
+    branches = [repo.get("default_branch") or "HEAD"]
+    if all_branches:
+        try:
+            branches = [b["name"] for b in client.get_all(f"/repos/{name}/branches")] or branches
+        except RateLimited:
+            raise
+        except RuntimeError as e:
+            result["notes"].append(f"{name}: could not list branches ({e}), scanning the default branch only")
+    outcomes = set()
+    for branch in branches:
+        outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not repo.get("size")))
+        result["branches_scanned"] += 1
+    if outcomes != {"error"}:
+        result["scanned"].append(name)
+    if outcomes <= {"clean", "empty"}:
+        seen[name] = repo["pushed_at"] + ("|all" if all_branches else "")
+        return "clean"
+    seen.pop(name, None)                                  # keep re-checking until it's clean
+    return "found" if "found" in outcomes else "error"
+
+
+def check_listed(client, cr, names, rescan, result, seen):
+    """Every branch of each repository named with --repo, unless it is unchanged since its last clean scan."""
+    done = {n.lower() for n in result["scanned"]}
+    for name in names:
+        row = {"repo": name, "outcome": "", "branches": 0}
+        result["listed"].append(row)
+        if name.lower() in done:
+            row["outcome"] = "scanned above"
+            continue
+        try:
+            repo = client.get(f"/repos/{name}")
+        except RateLimited:
+            raise
+        except RuntimeError as e:
+            row["outcome"] = "error"
+            hint = "not found, or your GitHub login can't see it" if "404" in str(e) or "not found" in str(e).lower() else str(e)
+            # a repository you asked for that couldn't be checked must not look clean
+            result["findings"].append(["WARNING", name, f"not scanned: {hint}"])
+            continue
+        row["repo"] = name = repo.get("full_name") or name           # GitHub's spelling
+        if not rescan and repo.get("pushed_at") and seen_ok(seen, repo, all_branches=True):
+            row["outcome"] = "unchanged"
+            continue
+        before = result["branches_scanned"]
+        row["outcome"] = scan_repo(client, cr, repo, True, result, seen)
+        row["branches"] = result["branches_scanned"] - before
+        done.add(name.lower())
+
+
+def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos=()):
     cr = load_checkrepo()
     remove_stale_temp()
     login = gh_login()
     client = Client(use_gh=bool(login))
     result = {"user": user, "source": "gh" if login else "public", "repos": 0, "recent": [], "scanned": [],
-              "branches_scanned": 0, "findings": [], "notes": []}
+              "branches_scanned": 0, "findings": [], "notes": [], "listed": []}
+    seen = load_seen()
+    try:
+        if user:
+            check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen)
+        check_listed(client, cr, repos, rescan, result, seen)
+    except RateLimited as e:
+        result["notes"].append(f"stopped early: {e}")
+    finally:
+        save_seen(seen)
+    if not login and repos and not user:          # (the account check already says so)
+        result["notes"].append("public repositories only - log in with `gh auth login` to include private ones")
+    for path in client.truncated:
+        result["notes"].append(f"only the first {MAX_PAGES * PER_PAGE} items of {path.split('?')[0]} were checked")
+    return result
+
+
+def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen):
+    """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
     # sorted by name, not by push time: a push during the listing can't shift repositories between pages
     if login and login.lower() == user.lower():
         path = "/user/repos?affiliation=owner,collaborator,organization_member&sort=full_name"
@@ -368,51 +464,54 @@ def check(user, days=7, max_repos=15, rescan=False, all_branches=False):
         result["findings"].append(["WARNING", user, f"{n} repositories were pushed within one hour (from {when}). "
                                    "The worm pushes into many repositories at once - if this wasn't you, act now"])
 
-    seen = load_seen()
     todo = [r for r in recent if rescan or not seen_ok(seen, r, all_branches)]
     result["unchanged"] = len(recent) - len(todo)
     done = 0
     try:
         for r in todo[:max_repos]:
-            name = r["full_name"]
-            branches = [r.get("default_branch") or "HEAD"]
-            if all_branches:
-                try:
-                    branches = [b["name"] for b in client.get_all(f"/repos/{name}/branches")] or branches
-                except RateLimited:
-                    raise
-                except RuntimeError as e:
-                    result["notes"].append(f"{name}: could not list branches ({e}), scanning the default branch only")
-            outcomes = set()
-            for branch in branches:
-                outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not r.get("size")))
-                result["branches_scanned"] += 1
-            if outcomes != {"error"}:
-                result["scanned"].append(name)
-            if outcomes <= {"clean", "empty"}:
-                seen[name] = r["pushed_at"] + ("|all" if all_branches else "")
-            else:
-                seen.pop(name, None)                      # keep re-checking until it's clean
+            scan_repo(client, cr, r, all_branches, result, seen)
             done += 1
-    except RateLimited as e:
-        result["notes"].append(f"stopped early: {e}")
     finally:
-        save_seen(seen)
-    for path in client.truncated:
-        result["notes"].append(f"only the first {MAX_PAGES * PER_PAGE} items of {path.split('?')[0]} were checked")
-    if len(todo) > done:
-        result["notes"].append(f"{len(todo) - done} more recently pushed repositories will be scanned next time"
-                               + (f" (limit {max_repos} per run)" if done == max_repos else ""))
-    return result
+        if len(todo) > done:
+            result["notes"].append(f"{len(todo) - done} more recently pushed repositories will be scanned next time"
+                                   + (f" (limit {max_repos} per run)" if done == max_repos else ""))
 
 
-def positive_int(argv, flag, default):
-    if flag not in argv:
-        return default
-    i = argv.index(flag) + 1
-    if i >= len(argv) or not argv[i].isdigit() or int(argv[i]) < 1:
-        raise ValueError(f"{flag} needs a whole number of 1 or more")
-    return int(argv[i])
+VALUE_FLAGS = ("--days", "--max-repos", "--repo")
+
+
+def parse_args(argv):
+    """{user, repos, days, max_repos, flags}; raises ValueError with a message for the user."""
+    opts = {"user": "", "repos": [], "days": 7, "max_repos": 15, "flags": set()}
+    positional, i = [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a in VALUE_FLAGS:
+            if i + 1 >= len(argv):
+                raise ValueError(f"{a} needs a value")
+            v = argv[i + 1]
+            if a == "--repo":
+                name = parse_repo(v)
+                if name.lower() not in {r.lower() for r in opts["repos"]}:
+                    opts["repos"].append(name)
+            elif not v.isdigit() or int(v) < 1:
+                raise ValueError(f"{a} needs a whole number of 1 or more")
+            else:
+                opts["days" if a == "--days" else "max_repos"] = int(v)
+            i += 2
+            continue
+        if a.startswith("--"):
+            opts["flags"].add(a)
+        else:
+            positional.append(a)
+        i += 1
+    if positional:
+        opts["user"] = positional[0].strip().lstrip("@")
+        if not USER_RE.fullmatch(opts["user"]):
+            raise ValueError(f"'{opts['user']}' is not a valid GitHub username")
+    if not opts["user"] and not opts["repos"]:
+        raise ValueError("name a GitHub username, or repositories with --repo owner/name")
+    return opts
 
 
 def main(argv):
@@ -420,34 +519,39 @@ def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 0 if argv else 3
-    user = argv[0].strip().lstrip("@")
-    if not user.replace("-", "").isalnum() or len(user) > 39:
-        print(f"github_check: '{user}' is not a valid GitHub username", file=sys.stderr)
-        return 3
     try:
-        days = positive_int(argv, "--days", 7)
-        max_repos = positive_int(argv, "--max-repos", 15)
+        o = parse_args(argv)
     except ValueError as e:
         print(f"github_check: {e}", file=sys.stderr)
         return 3
+    user, as_json, all_branches = o["user"], "--json" in o["flags"], "--all-branches" in o["flags"]
+    what = user or ", ".join(o["repos"])
     try:
-        res = check(user, days, max_repos, "--rescan" in argv, "--all-branches" in argv)
+        res = check(user, o["days"], o["max_repos"], "--rescan" in o["flags"], all_branches, o["repos"])
     except (RuntimeError, ValueError) as e:
-        if "--json" in argv:
-            print(json.dumps({"user": user, "error": str(e)}))
+        if as_json:
+            print(json.dumps({"user": user, "repos_listed": o["repos"], "error": str(e)}))
         else:
-            print(f"github_check: could not check {user}: {e}", file=sys.stderr)
+            print(f"github_check: could not check {what}: {e}", file=sys.stderr)
         return 3
     danger = any(f[0] == "DANGER" for f in res["findings"])
     code = 1 if danger else (2 if res["findings"] else 0)
     res["exit"] = code
-    if "--json" in argv:
+    if as_json:
         print(json.dumps(res))
         return code
-    print(f"GitHub account {user} ({'via gh, incl. private' if res['source'] == 'gh' else 'public repositories'}): "
-          f"{res['repos']} repositories, {len(res['recent'])} pushed in the last {days} days, {len(res['scanned'])} scanned"
-          + (f" ({res['branches_scanned']} branches)" if "--all-branches" in argv else "")
-          + (f", {res['unchanged']} unchanged since they were last scanned clean" if res.get("unchanged") else ""))
+    access = "via gh, incl. private" if res["source"] == "gh" else "public repositories"
+    if user:
+        print(f"GitHub account {user} ({access}): {res['repos']} repositories, {len(res['recent'])} pushed in the last "
+              f"{o['days']} days, {len(res['scanned']) - sum(1 for r in res['listed'] if r['branches'])} scanned"
+              + (f" ({res['branches_scanned']} branches)" if all_branches else "")
+              + (f", {res['unchanged']} unchanged since they were last scanned clean" if res.get("unchanged") else ""))
+    if res["listed"]:
+        print(f"Repositories you listed ({access if not user else 'every branch'}):")
+        for r in res["listed"]:
+            print(f"  · {r['repo']}: " + {"clean": f"scanned {r['branches']} branch(es)", "found": f"scanned {r['branches']} branch(es) - see below",
+                                          "unchanged": "unchanged since its last clean scan", "scanned above": "scanned with the account",
+                                          "error": "not scanned (see the warning below)"}.get(r["outcome"], r["outcome"]))
     for sev, where, detail in res["findings"]:
         print(f"  {'🛑' if sev == 'DANGER' else '⚠️ '} {where}: {detail}")
     for note in res["notes"]:

@@ -39,7 +39,7 @@ done
 
 # 4. files (reports and quarantined downloads are kept so you can review them)
 if [ -d "$DEST" ]; then
-  rm -rf "$DEST/bin" "$DEST/hooks" "$DEST/checkrepo.py" "$DEST/kitlib.py" "$DEST/github_check.py" "$DEST/github-seen.json" "$DEST/autofix.py" "$DEST/malware-paths.txt" "$DEST/daily-check.sh" "$DEST/fingerprints.txt" \
+  rm -rf "$DEST/bin" "$DEST/hooks" "$DEST/checkrepo.py" "$DEST/kitlib.py" "$DEST/github_check.py" "$DEST/github-seen.json" "$DEST/autofix.py" "$DEST/feed.py" "$DEST/ed25519.py" "$DEST/indicators.signed" "$DEST/safeinstall.py" "$DEST/osv-cache.json" "$DEST/malware-paths.txt" "$DEST/daily-check.sh" "$DEST/fingerprints.txt" \
          "$DEST/hooks-enabled" "$DEST/previous-hooksPath"
   rmdir "$DEST" 2>/dev/null
   if [ -d "$DEST" ]; then

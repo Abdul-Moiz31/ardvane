@@ -47,6 +47,14 @@ class ParseEvents(unittest.TestCase):
         self.assertEqual([i["level"] for i in sec["items"]], ["danger", "info", "info"])
         self.assertEqual(scanjob.github_section("me", {"error": "offline"})["items"][0]["level"], "warn")
 
+    def test_github_section_lists_chosen_repositories(self):
+        listed = [{"repo": "o/a", "outcome": "clean", "branches": 3}, {"repo": "o/b", "outcome": "unchanged", "branches": 0},
+                  {"repo": "o/c", "outcome": "error", "branches": 0}]
+        sec = scanjob.github_section("", {"listed": listed, "scanned": ["o/a"], "findings": [], "notes": []}, repos=["o/a", "o/b", "o/c"])
+        self.assertEqual([i["text"] for i in sec["items"]],
+                         ["o/a: 3 branch(es) scanned", "o/b: unchanged since its last clean scan", "o/c: not scanned"])
+        self.assertIn("o/a, o/b", scanjob.github_section("", {"error": "offline"}, repos=["o/a", "o/b"])["items"][0]["text"])
+
 
 class ScanJobHooks(unittest.TestCase):
     def test_on_finish_runs_after_a_successful_scan(self):
@@ -85,6 +93,49 @@ class Settings(unittest.TestCase):
         for bad in ("a/b", "-x", "x-", "a b", "x" * 40, "../etc"):
             with self.assertRaises(ValueError, msg=bad):
                 settings.clean_github_user(bad)
+
+    def test_github_repositories(self):
+        self.assertEqual(settings.clean_github_repos([" o/a ", "https://github.com/o/b/tree/main", "git@github.com:o/c.git", "O/A"]),
+                         ["o/a", "o/b", "o/c"])                     # links and addresses become owner/name; duplicates go
+        for bad in (["not a repo"], ["https://gitlab.com/o/a"], ["o/a;rm -rf ~"], "o/a", [f"o/r{i}" for i in range(101)]):
+            with self.assertRaises(ValueError, msg=str(bad)[:40]):
+                settings.clean_github_repos(bad)
+        s = settings.load()
+        s["github_repos"] = ["o/a", "evil/../x", 7]                 # a hand-edited file keeps only valid entries
+        settings.save(s)
+        self.assertEqual(settings.load()["github_repos"], ["o/a"])
+
+    def test_list_changes_apply_to_the_saved_list(self):
+        self.assertEqual(settings.change_list(["a/b"], {"add": "c/d"}, settings.clean_github_repos), ["a/b", "c/d"])
+        self.assertEqual(settings.change_list(["a/b", "c/d"], {"remove": "a/b"}, settings.clean_github_repos), ["c/d"])
+        self.assertEqual(settings.change_list(["a/b"], ["x/y"], settings.clean_github_repos), ["x/y"])
+        for bad in ({"add": "x/y", "remove": "a/b"}, {"rename": "x"}, "a/b", None):
+            with self.assertRaises(ValueError):
+                settings.change_list(["a/b"], bad, settings.clean_github_repos)
+
+    def test_simultaneous_changes_are_all_kept(self):
+        # the audit's case: many clicks at once used to lose most of them (and some failed with a 500)
+        import threading
+        from backend import server
+        with settings.editing() as s:
+            s["github_repos"], s["dismissed"] = [], []
+        errors = []
+
+        def run(fn, *a):
+            try:
+                fn(*a)
+            except Exception as e:                  # noqa: BLE001 - any failure fails the test below
+                errors.append(e)
+        threads = [threading.Thread(target=run, args=(server.post_settings, {"github_repos": {"add": f"o/r{i}"}})) for i in range(30)]
+        threads += [threading.Thread(target=run, args=(server.post_dismiss, {"key": f"{i:016x}"})) for i in range(40)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+        s = settings.load()
+        self.assertEqual(sorted(s["github_repos"]), sorted(f"o/r{i}" for i in range(30)))
+        self.assertEqual(len(s["dismissed"]), 40)
 
     def test_folders_must_exist(self):
         with self.assertRaises(ValueError):
@@ -299,6 +350,8 @@ class Server(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/reveal", j, json.dumps({"path": "/etc/hosts"}))[0], 400)
         self.assertEqual(self.req("POST", "/api/routine", j, json.dumps({"on": True, "time": "9:00; rm -rf ~"}))[0], 400)
         self.assertEqual(self.req("POST", "/api/settings", j, json.dumps({"github_user": "a/b"}))[0], 400)
+        self.assertEqual(self.req("POST", "/api/settings", j, json.dumps({"github_repos": ["https://evil.example/a/b"]}))[0], 400)
+        self.assertEqual(self.req("POST", "/api/settings", j, json.dumps({"github_repos": "o/a"}))[0], 400)
         self.assertEqual(self.req("POST", "/api/protect", j, json.dumps({"action": "format-disk"}))[0], 400)
         self.assertEqual(self.req("POST", "/api/dismiss", j, json.dumps({"key": "../../x"}))[0], 400)
         self.assertEqual(self.req("POST", "/api/scan", j, json.dumps({"folders": ["/not/a/folder"]}))[0], 400)

@@ -18,6 +18,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+os.environ["ARDVANE_NO_FEED"] = "1"      # built-in indicators only, so results never depend on this computer's feed
 SCANNER = os.environ.get("CHECKREPO") or os.path.join(HERE, "..", "checkrepo.py")
 QUIET = "--quiet" in sys.argv
 random.seed(7)
@@ -292,6 +293,7 @@ def main():
             import re as _re
             src = open(SCANNER, encoding="utf-8").read()
             builtin = set(_re.findall(r'"([^"]+)"', _re.search(r"MALICIOUS_NPM = \{(.*?)\n\}", src, _re.S).group(1)))
+            builtin |= set(_re.findall(r'"([^"]+)"', _re.search(r"MALICIOUS_PYPI = \{(.*?)\n\}", src, _re.S).group(1)))
             listed = {l.strip() for l in open(lst, encoding="utf-8") if l.strip() and not l.startswith("#")}
             pypi = os.path.join(HERE, "..", "lists", "pypi.txt")
             listed |= {l.strip() for l in open(pypi, encoding="utf-8") if l.strip() and not l.startswith("#")} if os.path.isfile(pypi) else set()
