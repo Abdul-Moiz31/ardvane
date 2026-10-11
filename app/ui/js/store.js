@@ -8,7 +8,7 @@ import { plural, duration } from './format.js';
  * @typedef {{title: string, items: Finding[]}} Section
  * @typedef {{id: string, mode: string, running: boolean, cancelled: boolean, phase: string, started: number, finished: number|null,
  *   progress: string|null, report: string|null, steps_total: number, steps_done: number, sections: Section[], github_user: string,
- *   danger: number, warn: number, ok: number, autofixed: any[]}} Scan
+ *   github_repos: string[], danger: number, warn: number, ok: number, autofixed: any[]}} Scan
  * @typedef {{id: string, kind: string, time: number, verdict: string, level: string, danger: number, warn: number}} Report
  */
 
@@ -19,7 +19,7 @@ export const S = {
   /** @type {{group: string, path: string, title: string}[]|null} */ docs: null,
   /** @type {any} */ tasks: null,
   /** @type {any} */ fixes: null,
-  docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '',
+  docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '', repoErr: '',
   scanOpts: { mode: 'full', where: 'home', /** @type {boolean|null} */ github: null },
 };
 
@@ -34,7 +34,7 @@ export async function refresh() {
   S.scan = S.data.scan;
   S.tasks = null;                        // the list may have changed (new findings, protection switched on)
   S.fixes = null;
-  if (S.scanOpts.github === null) S.scanOpts.github = !!S.data.settings.github_enabled;
+  if (S.scanOpts.github === null) S.scanOpts.github = !!(S.data.settings.github_enabled || S.data.settings.github_repos.length);
   document.querySelectorAll('[data-app-name]').forEach(el => { el.textContent = S.data.app; });
   document.title = S.data.app;
   rerender();
@@ -135,5 +135,11 @@ export function heroState() {
 
 export function scopeText() {
   const s = S.data.settings;
-  return `this computer, ${plural(s.folders.length, 'project folder')}` + (s.github_enabled && s.github_user ? ` and GitHub @${s.github_user}` : '');
+  const gh = githubLabel(s.github_enabled ? s.github_user : '', s.github_repos);
+  return `this computer, ${plural(s.folders.length, 'project folder')}` + (gh ? ` and GitHub ${gh}` : '');
+}
+
+/** What the GitHub check covers, e.g. "@me + 2 repositories" ('' when nothing). @param {string} user @param {string[]} repos */
+export function githubLabel(user, repos) {
+  return [user ? '@' + user : '', repos.length ? plural(repos.length, 'repository', 'repositories') : ''].filter(Boolean).join(' + ');
 }

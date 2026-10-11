@@ -48,28 +48,37 @@ def parse_events(lines, dismissed=()):
     return sections, progress, code, report
 
 
-def github_section(user, result, dismissed=()):
-    sec = {"title": "GitHub account", "items": []}
+LISTED_OUTCOME = {"clean": "{n} branch(es) scanned", "found": "{n} branch(es) scanned", "unchanged": "unchanged since its last clean scan",
+                  "scanned above": "scanned with your account", "error": "not scanned"}
+
+
+def github_section(user, result, dismissed=(), repos=()):
+    sec = {"title": "GitHub", "items": []}
     if result is None:
         return sec
     if result.get("error"):
-        sec["items"].append(item("warn", f"Couldn't check @{user}: {result['error']}", key="0" * 16))
+        what = f"@{user}" if user else ", ".join(repos)
+        sec["items"].append(item("warn", f"Couldn't check {what}: {result['error']}", key="0" * 16))
         return sec
     for sev, where, detail in result.get("findings", []):
         sec["items"].append(item("danger" if sev == "DANGER" else "warn", f"{where}: {detail}", dismissed=dismissed))
-    summary = (f"@{result.get('user', user)}: {result.get('repos', 0)} repositories, {len(result.get('recent', []))} pushed "
-               f"in the last 7 days, {len(result.get('scanned', []))} scanned"
-               + (f", {result['unchanged']} unchanged since their last clean scan" if result.get("unchanged") else ""))
-    sec["items"].append(item("ok" if not result.get("findings") else "info", summary))
+    level = "ok" if not result.get("findings") else "info"
+    if user:
+        sec["items"].append(item(level, f"@{result.get('user', user)}: {result.get('repos', 0)} repositories, "
+                                 f"{len(result.get('recent', []))} pushed in the last 7 days, "
+                                 f"{len(result.get('scanned', [])) - sum(1 for r in result.get('listed', []) if r.get('branches'))} scanned"
+                                 + (f", {result['unchanged']} unchanged since their last clean scan" if result.get("unchanged") else "")))
+    for r in result.get("listed", []):
+        sec["items"].append(item(level, f"{r['repo']}: " + LISTED_OUTCOME.get(r["outcome"], r["outcome"]).format(n=r.get("branches", 0))))
     for note in result.get("notes", []):
         sec["items"].append(item("info", note))
     return sec
 
 
 class ScanJob:
-    def __init__(self, mode, folders, github_user, on_finish=None):
+    def __init__(self, mode, folders, github_user, github_repos=(), on_finish=None):
         self.id = secrets.token_hex(6)
-        self.mode, self.folders, self.github_user = mode, list(folders), github_user
+        self.mode, self.folders, self.github_user, self.github_repos = mode, list(folders), github_user, list(github_repos)
         self.started, self.finished = time.time(), None
         self.events_file = os.path.join(tempfile.mkdtemp(prefix="polinrider-scan-"), "events.tsv")
         self.phase = "machine"
@@ -100,7 +109,7 @@ class ScanJob:
             p = self._start(self._machine_command(), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **group)
             if p:
                 p.wait()
-            if self.github_user and not self.cancelled:
+            if self.github_on and not self.cancelled:
                 self.phase = "github"
                 self._run_github()
             if self.on_finish and not self.cancelled:
@@ -113,8 +122,13 @@ class ScanJob:
             self.finished = time.time()
             self.phase = "done"
 
+    @property
+    def github_on(self):
+        return bool(self.github_user or self.github_repos)
+
     def _run_github(self):
-        cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py"), self.github_user, "--json"]
+        cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py")] + ([self.github_user] if self.github_user else [])
+        cmd += [a for r in self.github_repos for a in ("--repo", r)] + ["--json"]
         p = self._start(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
         if not p:
             return
@@ -150,16 +164,17 @@ class ScanJob:
         except OSError:
             lines = []
         sections, progress, code, report = parse_events(lines, set(dismissed))
-        if self.github_user and (self.github is not None or self.phase == "github"):
-            sections.append(github_section(self.github_user, self.github, set(dismissed)))
+        if self.github_on and (self.github is not None or self.phase == "github"):
+            sections.append(github_section(self.github_user, self.github, set(dismissed), self.github_repos))
         items = [i for s in sections for i in s["items"]]
-        total = len(MACHINE_STEPS) + (1 if self.github_user else 0)
+        total = len(MACHINE_STEPS) + (1 if self.github_on else 0)
         running = self.finished is None
         return {
             "id": self.id, "mode": self.mode, "running": running, "cancelled": self.cancelled, "phase": self.phase,
             "started": self.started, "finished": self.finished, "progress": progress, "code": code, "report": report,
             "steps_total": total, "steps_done": max(0, len(sections) - (1 if running else 0)),
-            "sections": sections, "github_user": self.github_user, "folders": self.folders, "autofixed": self.autofixed,
+            "sections": sections, "github_user": self.github_user,
+            "github_repos": self.github_repos, "folders": self.folders, "autofixed": self.autofixed,
             "danger": sum(1 for i in items if i["level"] == "danger"),
             "warn": sum(1 for i in items if i["level"] == "warn" and not i["dismissed"]),
             "ok": sum(1 for i in items if i["level"] == "ok"),

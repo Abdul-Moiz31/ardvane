@@ -154,15 +154,24 @@ csrutil status 2>/dev/null | grep -q enabled || chk "System Integrity Protection
 spctl --status 2>/dev/null | grep -q enabled || chk "Gatekeeper is not enabled"
 [ $danger -eq $n ] && [ $warn -eq $nw ] && out "  ✅ intact"
 
-# ---------------------------------------------------------------- 7. GitHub account (opt-in, set in the dashboard's Settings)
-gh_user=""
-[ -n "$PY" ] && [ -f "$DEST/settings.json" ] && gh_user="$("$PY" -c 'import json,sys
+# ---------------------------------------------------------------- 7. GitHub (opt-in, set in the dashboard's Settings)
+# arguments for github_check.py, one per line: the account (when its check is on), then --repo <name> per listed repo.
+# Names go through github_check's own parser, so a hand-edited bad entry is skipped (as in the dashboard).
+gh_args=()
+[ -n "$PY" ] && [ -f "$DEST/settings.json" ] && [ -f "$DEST/github_check.py" ] && while IFS= read -r a; do [ -n "$a" ] && gh_args+=("$a"); done < <("$PY" -c 'import json,sys
+sys.path.insert(0, sys.argv[2])
 try:
-    s = json.load(open(sys.argv[1], encoding="utf-8")); print(s.get("github_user", "") if s.get("github_enabled") else "")
-except Exception: pass' "$DEST/settings.json" 2>/dev/null)"
-if [ -n "$gh_user" ] && [ -f "$DEST/github_check.py" ]; then
-  out "7. GitHub account @$gh_user"
-  ghout="$("$PY" "$DEST/github_check.py" "$gh_user" 2>&1)"; ghrc=$?
+    from github_check import USER_RE, parse_repo
+    s = json.load(open(sys.argv[1], encoding="utf-8"))
+    if s.get("github_enabled") and USER_RE.fullmatch(str(s.get("github_user", ""))): print(s["github_user"])
+    for r in s.get("github_repos") or []:
+        try: name = parse_repo(r)
+        except ValueError: continue
+        print("--repo"); print(name)
+except Exception: pass' "$DEST/settings.json" "$DEST" 2>/dev/null)
+if [ ${#gh_args[@]} -gt 0 ] && [ -f "$DEST/github_check.py" ]; then
+  out "7. GitHub"
+  ghout="$("$PY" "$DEST/github_check.py" "${gh_args[@]}" 2>&1)"; ghrc=$?
   while IFS= read -r l; do
     case "$l" in
       *"🛑"*) danger=$((danger+1)); out "$l" ;;

@@ -32,6 +32,16 @@ every way that worked is now caught, and covered by a test.
   or removed, a protection file deleted, a repository switching hooks off for itself (Husky folders are fine), and
   the shell setup being removed.
 
+**Scan any GitHub repository, not only your account.**
+
+- **Settings → GitHub → Repositories to scan:** add repositories one by one (yours, your organization's, a
+  teammate's) as `owner/name`, a github.com link or a `git@github.com:` address, and remove them like folders. Every
+  branch of each one is scanned with each scan and daily check. A repository that can't be checked shows as a
+  warning, never as clean.
+- `ardvane check-github owner/name` scans every branch of repositories from the terminal, without cloning them.
+- Settings changes are saved one at a time and lists change by "add" / "remove", so quick clicks or a second tab can
+  no longer lose a change.
+
 **Releases can't be faked.**
 
 - Every release carries a reproducible source archive signed with GitHub's build provenance. Only the release

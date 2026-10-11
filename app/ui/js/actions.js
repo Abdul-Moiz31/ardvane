@@ -117,7 +117,7 @@ export async function startScan(mode) {
   const folders = o.where === 'folders' && (mode || o.mode) === 'full'
     ? set.folders.map(/** @param {string} f */ f => f.replace(/^~(?=$|[\\/])/, S.data.home)) : [];
   try {
-    const r = await api('/api/scan', { mode: mode || o.mode, folders, github: !!(o.github && set.github_user) });
+    const r = await api('/api/scan', { mode: mode || o.mode, folders, github: !!(o.github && (set.github_user || set.github_repos.length)) });
     S.scan = r.scan;
     S.showPassed = false;
     location.hash = '#scan';

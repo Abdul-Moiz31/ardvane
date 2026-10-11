@@ -74,6 +74,7 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 |---|---|
 | `ardvane scan` | Read-only scan of this computer and your projects (`--quick` for machine checks only) |
 | `ardvane check <folder>` | Scan one folder before you open it: a download, a coding test, a colleague's repo |
+| `ardvane check-github <owner/repo>` | Scan every branch of GitHub repositories without cloning them |
 | `ardvane protect` | Turn on protection (`--dry-run` shows every change first) |
 | `ardvane unprotect` | Remove protection and restore your previous settings |
 | `ardvane fixes` | What Ardvane can fix for you, with undo |
@@ -108,7 +109,7 @@ and on Windows (beta) the matching `.ps1` files in `windows/`.
 | 🔧 **Fixes, with undo** | Fixes what's safe to fix (editor and npm settings, switched-off protection, malware in known locations), **ask first** by default or **automatic** if you choose. Malware is quarantined, never deleted |
 | ✅ **To-do list** | Every finding becomes a short checklist; a real infection opens the recovery checklist; a later scan checks that your fix worked |
 | ☀️ **Daily check** | Runs at the time you choose, notices if malware switched your protection off, and shows a notification |
-| 🐙 **GitHub account check** *(optional)* | Warns about many repos pushed at once and scans recently pushed branches. Your token stays in the GitHub CLI |
+| 🐙 **GitHub check** *(optional)* | Warns about many repos pushed at once and scans recently pushed repos, plus every branch of any repos you list (yours, your organization's, a teammate's). Your token stays in the GitHub CLI |
 | 📚 **Guides** | Every attack explained, and step-by-step recovery: cut off access, clean repositories, rotate secrets, harden |
 
 <a id="how-it-protects-you"></a>

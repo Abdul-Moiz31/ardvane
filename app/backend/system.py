@@ -1,4 +1,5 @@
 """Small, safe wrappers around processes and files."""
+import contextlib
 import hashlib
 import json
 import os
@@ -6,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)       # Windows: don't flash a console window
@@ -44,13 +46,19 @@ def read_json(path, default):
 
 
 def write_private(path, text):
-    """Atomically write a file that only the current user can read."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(tmp, path)
+    """Atomically write a file that only the current user can read. Each write uses its own temporary file, so two
+    writes at the same moment can't collide (the later one simply wins)."""
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=os.path.basename(path) + ".", suffix=".tmp")   # mode 0600
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def read_text(path, limit=2_000_000):

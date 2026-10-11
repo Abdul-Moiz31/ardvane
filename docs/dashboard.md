@@ -24,7 +24,7 @@ The dashboard closes itself about 20 minutes after you stop using it. Clicking t
 |---|---|
 | **Overview** | The security dashboard: one status, four numbers (threats, items to review, protection, next daily check), a single "Needs your attention" list combining fixes and to-dos, and the last 30 days as a chart. |
 | **To-do** | Concrete steps, each with a checkbox. Every finding becomes a short checklist, a DANGER opens the full recovery checklist (in the guide's order), one-time setup steps (2FA, Vigilant mode, rulesets…) and weekly / monthly routine checks. |
-| **Scan** | Full or quick scan; your whole home folder or only your project folders; optionally your GitHub account. Live progress, then the results grouped by check, with *Show in Finder / Explorer* and *What to do* buttons. Mark harmless warnings as yours to hide them next time. |
+| **Scan** | Full or quick scan; your whole home folder or only your project folders; optionally your GitHub account and the repositories you listed. Live progress, then the results grouped by check, with *Show in Finder / Explorer* and *What to do* buttons. Mark harmless warnings as yours to hide them next time. |
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
@@ -98,13 +98,20 @@ Every repository you can reach is listed, not only the first 100. There is no fi
 the latest files of one branch (much less than the repository size GitHub shows), is streamed to disk, and stops only
 if less than 2 GB of disk space would be left. Files over 20 MB (videos, models, datasets) are listed as not scanned.
 
+**Repositories to scan.** In **Settings → GitHub** you can also list repositories one by one - yours, your
+organization's or a teammate's, any repository your GitHub login can read - as `owner/name`, a github.com link or a
+`git@github.com:` address. Every branch of each one is scanned with each scan and daily check, however long ago it was
+pushed, and you can remove them again like folders. This works without a username too. A listed repository that can't
+be checked (a typo, or no access) is shown as a warning, never as clean.
+
 If the [GitHub CLI](https://cli.github.com) is installed and logged in (`gh auth login`), private repositories are
 included. Your token stays inside `gh`, and the kit never reads or stores it. Without `gh`, only public repositories
 are checked. Repositories that were already scanned clean are skipped until they get a new push.
 
-You can also run it on its own: `python3 scanner/github_check.py <username>`. Add `--all-branches` to scan every
-branch (the worm pushes into all of them), `--days N` to look further back, and `--max-repos N` to scan more
-repositories in one run.
+From the terminal: `ardvane check-github owner/name [more ...]` scans every branch of those repositories once, and
+`python3 scanner/github_check.py <username>` checks an account. Add `--all-branches` to scan every branch of an
+account's repositories (the worm pushes into all of them), `--days N` to look further back, `--max-repos N` to scan
+more repositories in one run, and `--rescan` to scan again what was already clean.
 
 ## Security design
 

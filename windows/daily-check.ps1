@@ -128,18 +128,36 @@ Get-ChildItem "$HOME\.vscode\extensions", "$HOME\.cursor\extensions" -Directory 
     ForEach-Object { Chk "editor extension installed/updated in last 24h: $($_.Name) - make sure you trust its publisher" }
 if ($script:danger -eq $n -and $script:warn -eq $nw) { Add-Line '  OK intact' }
 
-# 7. GitHub account (opt-in, set in the dashboard's Settings)
-$ghUser = ''
-try { $st = Get-Content "$Dest\settings.json" -Raw -ErrorAction Stop | ConvertFrom-Json; if ($st.github_enabled) { $ghUser = "$($st.github_user)" } } catch { }
-if ($py -and $ghUser -and (Test-Path "$Dest\github_check.py")) {
-    Add-Line "7. GitHub account @$ghUser"
-    $json = Invoke-Native { & $py.Exe @($py.Args) "$Dest\github_check.py" $ghUser --json 2>$null }
+# 7. GitHub (opt-in, set in the dashboard's Settings): the account when its check is on, plus every listed repository
+# Names go through github_check's own parser, so a hand-edited bad entry is skipped (as in the dashboard).
+$ghArgs = @()
+if ($py -and (Test-Path "$Dest\settings.json") -and (Test-Path "$Dest\github_check.py")) {
+    $snippet = @'
+import json, sys
+sys.path.insert(0, sys.argv[2])
+try:
+    from github_check import USER_RE, parse_repo
+    s = json.load(open(sys.argv[1], encoding="utf-8"))
+    if s.get("github_enabled") and USER_RE.fullmatch(str(s.get("github_user", ""))): print(s["github_user"])
+    for r in s.get("github_repos") or []:
+        try: name = parse_repo(r)
+        except ValueError: continue
+        print("--repo"); print(name)
+except Exception: pass
+'@
+    $ghArgs = @(Invoke-Native { & $py.Exe @($py.Args) -c $snippet "$Dest\settings.json" $Dest 2>$null } | Where-Object { $_ })
+}
+if ($py -and $ghArgs.Count -gt 0 -and (Test-Path "$Dest\github_check.py")) {
+    Add-Line '7. GitHub'
+    $json = Invoke-Native { & $py.Exe @($py.Args) "$Dest\github_check.py" @ghArgs --json 2>$null }
     $res = $null; try { $res = ($json -join "`n") | ConvertFrom-Json } catch { }
     if (-not $res) { Chk 'the GitHub check could not run' }
     elseif ($res.error) { Chk "the GitHub check could not run: $($res.error)" }
     else {
         foreach ($f in $res.findings) { if ($f[0] -eq 'DANGER') { Bad "$($f[1]): $($f[2])" } else { Chk "$($f[1]): $($f[2])" } }
-        if (-not $res.findings) { Add-Line "  OK $($res.repos) repositories, $(@($res.scanned).Count) recently pushed scanned - no malware" }
+        foreach ($n in @($res.notes)) { if ($n) { Add-Line "  $n" } }
+        foreach ($r in @($res.listed)) { if ($r) { Add-Line "  $($r.repo): $($r.outcome)$(if ($r.branches) { " ($($r.branches) branches)" })" } }
+        if (-not $res.findings) { Add-Line "  OK $(@($res.scanned).Count) repositories scanned - no malware" }
     }
 }
 
