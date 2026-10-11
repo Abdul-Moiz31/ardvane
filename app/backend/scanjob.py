@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from . import actions
+from . import actions, detections
 from .config import IS_WIN, KIT, SCANS
 from .system import NO_WINDOW, python_exe, run, short_hash
 
@@ -76,7 +76,7 @@ def github_section(user, result, dismissed=(), repos=()):
 
 
 class ScanJob:
-    def __init__(self, mode, folders, github_user, github_repos=(), on_finish=None):
+    def __init__(self, mode, folders, github_user, github_repos=(), on_finish=None, update_feed=False):
         self.id = secrets.token_hex(6)
         self.mode, self.folders, self.github_user, self.github_repos = mode, list(folders), github_user, list(github_repos)
         self.started, self.finished = time.time(), None
@@ -86,6 +86,7 @@ class ScanJob:
         self.cancelled = False
         self.github = None
         self.on_finish = on_finish
+        self.update_feed, self.feed_note = update_feed, None
         self.autofixed = []
         self.lock = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
@@ -103,6 +104,13 @@ class ScanJob:
 
     def _run(self):
         try:
+            if self.update_feed and not self.cancelled:     # newest signed detections first (a few seconds at most)
+                self.phase = "feed"
+                try:
+                    self.feed_note = detections.update()["message"]
+                except Exception as e:                       # never let the feed stop the scan itself
+                    self.feed_note = f"Couldn't update detections ({e.__class__.__name__})"
+                self.phase = "machine"
             os.makedirs(SCANS, exist_ok=True)
             env = dict(os.environ, SCAN_EVENTS=self.events_file, SCAN_REPORT_DIR=SCANS)
             group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | NO_WINDOW} if IS_WIN else {"start_new_session": True})
@@ -174,7 +182,7 @@ class ScanJob:
             "started": self.started, "finished": self.finished, "progress": progress, "code": code, "report": report,
             "steps_total": total, "steps_done": max(0, len(sections) - (1 if running else 0)),
             "sections": sections, "github_user": self.github_user,
-            "github_repos": self.github_repos, "folders": self.folders, "autofixed": self.autofixed,
+            "github_repos": self.github_repos, "feed": self.feed_note, "folders": self.folders, "autofixed": self.autofixed,
             "danger": sum(1 for i in items if i["level"] == "danger"),
             "warn": sum(1 for i in items if i["level"] == "warn" and not i["dismissed"]),
             "ok": sum(1 for i in items if i["level"] == "ok"),

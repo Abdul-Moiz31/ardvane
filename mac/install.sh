@@ -53,7 +53,7 @@ run cp "$SCANNER/checkrepo.py" "$DEST/checkrepo.py"
 run cp "$SCANNER/hooks/dispatch" "$DEST/hooks/dispatch"
 run chmod 755 "$DEST/hooks/dispatch"
 run cp "$SCANNER/safeclone/git-safeclone" "$DEST/bin/git-safeclone"
-for f in kitlib.py github_check.py autofix.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # shared helpers, GitHub check, fixer
+for f in kitlib.py github_check.py autofix.py feed.py ed25519.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # helpers, GitHub check, fixer, signed detection feed
 run cp "$SCANNER/lists/malware-paths.txt" "$DEST/malware-paths.txt"
 run chmod 755 "$DEST/bin/git-safeclone"
 if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo"; else

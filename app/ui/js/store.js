@@ -8,7 +8,7 @@ import { plural, duration } from './format.js';
  * @typedef {{title: string, items: Finding[]}} Section
  * @typedef {{id: string, mode: string, running: boolean, cancelled: boolean, phase: string, started: number, finished: number|null,
  *   progress: string|null, report: string|null, steps_total: number, steps_done: number, sections: Section[], github_user: string,
- *   github_repos: string[], danger: number, warn: number, ok: number, autofixed: any[]}} Scan
+ *   github_repos: string[], feed: string|null, danger: number, warn: number, ok: number, autofixed: any[]}} Scan
  * @typedef {{id: string, kind: string, time: number, verdict: string, level: string, danger: number, warn: number}} Report
  */
 

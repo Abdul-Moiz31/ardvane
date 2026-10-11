@@ -18,6 +18,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+os.environ["ARDVANE_NO_FEED"] = "1"      # built-in indicators only, so results never depend on this computer's feed
 SCANNER = os.environ.get("CHECKREPO") or os.path.join(HERE, "..", "checkrepo.py")
 QUIET = "--quiet" in sys.argv
 random.seed(7)

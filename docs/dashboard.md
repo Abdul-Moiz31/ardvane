@@ -28,7 +28,7 @@ The dashboard closes itself about 20 minutes after you stop using it. Clicking t
 | **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
-| **Settings** | Daily check time (09:00 by default), which folders are scanned (added with Finder / the Windows folder picker), what the app may fix for you, and the optional GitHub check. |
+| **Settings** | Daily check time (09:00 by default), which folders are scanned (added with Finder / the Windows folder picker), what the app may fix for you, the optional GitHub check and repositories to scan, and the signed detection list (see below). |
 
 ## The to-do list
 
@@ -112,6 +112,19 @@ From the terminal: `ardvane check-github owner/name [more ...]` scans every bran
 `python3 scanner/github_check.py <username>` checks an account. Add `--all-branches` to scan every branch of an
 account's repositories (the worm pushes into all of them), `--days N` to look further back, `--max-repos N` to scan
 more repositories in one run, and `--rescan` to scan again what was already clean.
+
+## Detections that keep up
+
+Attackers change their code to slip past scanners, and many people rarely update their tools. Besides the detections
+built into each version, Ardvane downloads a **signed list of new ones** (attacker servers and IPs, malware
+fingerprints, malicious npm and PyPI packages) before each scan and daily check. **Settings → Detections** shows which
+list you have, has an **Update now** button, and can turn automatic updates off. From the terminal:
+`ardvane update-detections`.
+
+The list is used only if it carries Ardvane's Ed25519 signature (checked by the app itself, against a key built into
+it) and is newer than the copy you already have. It can only add detections - never remove one, and never name files
+for Ardvane to move or change - so the worst a bad list could do is raise false alarms, and the signature stops even
+that. If an update fails, the last good copy is used. How entries get into the list: [feed/README.md](../feed/README.md).
 
 ## Security design
 

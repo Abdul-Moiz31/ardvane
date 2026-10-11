@@ -75,6 +75,7 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 | `ardvane scan` | Read-only scan of this computer and your projects (`--quick` for machine checks only) |
 | `ardvane check <folder>` | Scan one folder before you open it: a download, a coding test, a colleague's repo |
 | `ardvane check-github <owner/repo>` | Scan every branch of GitHub repositories without cloning them |
+| `ardvane update-detections` | Download the latest signed detection list now (scans and the daily check do this anyway) |
 | `ardvane protect` | Turn on protection (`--dry-run` shows every change first) |
 | `ardvane unprotect` | Remove protection and restore your previous settings |
 | `ardvane fixes` | What Ardvane can fix for you, with undo |
@@ -132,6 +133,9 @@ A scan takes about **0.1–0.7 seconds per repository**. When everything is clea
 
 - **Local only.** No account, no telemetry, no cloud. The dashboard listens on `127.0.0.1`, needs a per-session key,
   and refuses requests from other websites.
+- **Detections that keep up, signed.** Before each scan and daily check, Ardvane downloads a list of new detections
+  from GitHub. It is used only if it carries Ardvane's signature and is newer than the copy you have, and it can only
+  add detections, never remove one. Nothing about your computer is sent. See [feed/README.md](feed/README.md).
 - **Reads, doesn't run.** The scanner only reads files and runs git with hooks and `core.fsmonitor` disabled, so even a
   booby-trapped repository can't make it execute anything.
 - **Nothing deleted, everything reversible.** You see every change before it's made, fixes can be undone, and malware is

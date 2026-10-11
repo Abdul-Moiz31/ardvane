@@ -55,7 +55,7 @@ function progress(sc) {
   }));
   const bar = h('div');
   bar.style.width = Math.max(4, Math.round(100 * current / names.length)) + '%';
-  const now = sc.phase === 'github' ? `Checking GitHub: ${gh}…` : sc.progress ? `Scanning project ${sc.progress}` : `${names[current]}…`;
+  const now = sc.phase === 'feed' ? 'Updating detections…' : sc.phase === 'github' ? `Checking GitHub: ${gh}…` : sc.progress ? `Scanning project ${sc.progress}` : `${names[current]}…`;
   const cancel = button('Cancel', () => busy(cancel, cancelScan), 'btn-sm', 'stop');
   return card(`${sc.mode === 'quick' ? 'Quick' : 'Full'} scan in progress`, 'radar',
     h('div', { class: 'card-pad stack' },
@@ -88,6 +88,7 @@ function results(sc) {
     h('div', { class: 'summary-facts' },
       fact('Type', sc.mode === 'quick' ? 'Quick scan' : 'Full scan'), fact('Started', fmtTime(sc.started)),
       fact('Took', duration(sc.started, sc.finished || undefined)), fact('GitHub', githubLabel(sc.github_user, sc.github_repos || []) || 'not included'),
+      fact('Detections', sc.feed || 'built-in (feed updates are off)'),
       sc.report ? h('div', {}, button('Open full report', () => openReport('scan:' + String(sc.report).split(/[\\/]/).pop()), 'btn-sm', 'file')) : null)));
 
   const list = h('div', { class: 'card' });

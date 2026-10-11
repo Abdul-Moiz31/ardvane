@@ -9,7 +9,7 @@ import { setRoutine, setOfflineBanner } from '../actions.js';
 import { chipList, changeList } from '../components.js';
 
 export function renderSettings() {
-  return [pageHead('Settings', 'Choose when the daily check runs, what it covers and what the app may fix for you.'), dailyCheck(), folders(), autofixMode(), github(), privacy(), about()];
+  return [pageHead('Settings', 'Choose when the daily check runs, what it covers and what the app may fix for you.'), dailyCheck(), folders(), autofixMode(), github(), detections(), privacy(), about()];
 }
 
 function dailyCheck() {
@@ -118,11 +118,31 @@ function githubRepos() {
     S.repoErr ? h('div', { class: 'err', role: 'alert', text: S.repoErr }) : null);
 }
 
+function detections() {
+  const s = S.data.settings, f = S.data.feed;
+  const updateBtn = button('Update now', () => busy(updateBtn, async () => {
+    try { const r = await api('/api/feed/update', {}); await refresh(); toast(r.message, r.ok ? undefined : 'danger'); } catch (e) { showError(e); }
+  }), '', 'refresh');
+  const toggle = switchEl(s.feed_updates, async (/** @type {Event} */ e) => {
+    const on = /** @type {HTMLInputElement} */ (e.target).checked;
+    try { await api('/api/settings', { feed_updates: on }); await refresh(); toast(on ? 'Detections update automatically' : 'Automatic detection updates off'); } catch (err) { showError(err); }
+  }, 'Update detections automatically');
+  return card('Detections', 'shieldCheck', h('div', { class: 'card-pad stack' },
+    h('p', { class: 'help', text: 'Attackers change their code to slip past scanners. Besides the detections built into this version, Ardvane downloads a signed list of new ones - attacker servers, malware fingerprints, malicious packages - before each scan and daily check, so it keeps up without an update.' }),
+    h('div', { class: 'row' },
+      h('div', { class: 'row-icon ' + (f ? 'ok' : '') }, icon(f ? 'checkCircle' : 'info')),
+      h('div', { class: 'grow' },
+        h('div', { class: 'title', text: f ? `Detection list from ${f.published}` : 'No detection list downloaded yet' }),
+        h('div', { class: 'help', text: f ? `${f.count} detections added to the ones built in.` : 'Only the built-in detections are used until the first update.' })),
+      updateBtn),
+    h('p', { class: 'help', text: 'Every update is checked against Ardvane\'s signing key before it is used, an older list is never accepted, and it can only add detections - never remove any, or change your files. It is one download from GitHub; nothing about this computer is sent.' })), toggle);
+}
+
 function privacy() {
   return card('Privacy', 'lock', h('div', { class: 'card-pad' }, h('ul', { class: 'help' },
     h('li', { text: 'Runs only on this computer. The dashboard is served from 127.0.0.1 and refuses requests from other websites.' }),
     h('li', { text: 'No account, no telemetry, no tracking. Reports stay in ~/.checkrepo/reports.' }),
-    h('li', { text: 'The only internet connection is to GitHub\'s API, and only while the GitHub check is on or repositories are listed.' }),
+    h('li', { text: 'The only internet connections are to GitHub: downloading the signed detection list (unless turned off under Detections), and its API while the GitHub check is on or repositories are listed.' }),
     h('li', { text: 'Scans only read files. Nothing is changed unless you press a button that says so.' }))));
 }
 

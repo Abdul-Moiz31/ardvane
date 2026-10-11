@@ -21,6 +21,11 @@ danger=0; warn=0
 out() { echo "$*" >> "$REPORT"; }
 bad() { danger=$((danger+1)); out "  🛑 $*"; }
 chk() { warn=$((warn+1)); out "  ⚠️  $*"; }
+# setting KEY DEFAULT: a value from the dashboard's settings.json (DEFAULT if missing or unreadable)
+setting() { [ -n "$PY" ] && "$PY" -c 'import json,sys
+try: v = json.load(open(sys.argv[1], encoding="utf-8")).get(sys.argv[2], sys.argv[3])
+except Exception: v = sys.argv[3]
+print(str(v).lower())' "$DEST/settings.json" "$1" "$2" 2>/dev/null || echo "$2"; }
 : > "$REPORT"
 out "Ardvane daily check — $(date '+%Y-%m-%d %H:%M')"
 out ""
@@ -69,6 +74,10 @@ if [ -n "$hit" ]; then bad "connection to a known attacker server: $hit"; else o
 
 # ---------------------------------------------------------------- 5. projects
 out "5. Projects (checkrepo)"
+# new detections first: the signed feed (feed.py) - on unless turned off in the dashboard's Settings
+if [ -n "$PY" ] && [ -f "$DEST/feed.py" ] && [ "$(setting feed_updates true)" = "true" ]; then
+  out "  $("$PY" "$DEST/feed.py" update 2>&1 | head -1)"
+fi
 if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
   roots=(); cand=()
   if [ -f "$DEST/projects.txt" ]; then
@@ -184,9 +193,7 @@ if [ ${#gh_args[@]} -gt 0 ] && [ -f "$DEST/github_check.py" ]; then
 fi
 
 # ---------------------------------------------------------------- 8. automatic fixes (only in "Automatic" mode)
-if [ -n "$PY" ] && [ -f "$DEST/autofix.py" ] && [ "$("$PY" -c 'import json,sys
-try: print(json.load(open(sys.argv[1], encoding="utf-8")).get("autofix", "ask"))
-except Exception: print("ask")' "$DEST/settings.json" 2>/dev/null)" = "auto" ]; then
+if [ -n "$PY" ] && [ -f "$DEST/autofix.py" ] && [ "$(setting autofix ask)" = "auto" ]; then
   fixed="$("$PY" "$DEST/autofix.py" auto 2>&1)"
   if [ -n "$fixed" ]; then
     out "8. Automatic fixes"

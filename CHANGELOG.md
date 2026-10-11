@@ -42,6 +42,17 @@ every way that worked is now caught, and covered by a test.
 - Settings changes are saved one at a time and lists change by "add" / "remove", so quick clicks or a second tab can
   no longer lose a change.
 
+**Detections that keep up between releases.**
+
+- Before each scan and daily check, Ardvane downloads a signed list of new detections - attacker servers and IPs,
+  malware fingerprints, code markers, malicious npm and PyPI packages - so it recognises new variants without an
+  upgrade. Settings → Detections shows the list you have and can turn updates off; `ardvane update-detections` updates
+  from the terminal.
+- The list is used only with Ardvane's Ed25519 signature (verified by the app itself, no dependencies), only if newer
+  than the copy you have, and it can only add detections. A failed update keeps the last good copy.
+- Indicator matching now looks each finding up instead of trying every pattern, so a large list doesn't slow scans
+  down; the package checker and the scanner share one implementation.
+
 **Releases can't be faked.**
 
 - Every release carries a reproducible source archive signed with GitHub's build provenance. Only the release

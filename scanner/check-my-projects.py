@@ -15,6 +15,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import checkrepo    # noqa: E402  (one implementation of package matching, with the detection feed's packages included)
 
 
 def load(name):
@@ -25,10 +27,16 @@ def load(name):
         return set()
 
 
-NPM, PYPI, PACKAGIST = load("lists/npm.txt"), load("lists/pypi.txt"), load("lists/packagist.txt")
-# "node_modules/<name>", "<name>":, <name>@<ver>, npm aliases "npm:<name>@", pnpm v6 keys "/<name>@" — never a longer name
-NPM_RE = re.compile(r'(?:node_modules/|npm:|(?m:^)[ \t]*/|(?<![\w@/.-]))('
-                    + "|".join(re.escape(n) for n in sorted(NPM, key=len, reverse=True)) + r')(?=["\'@:\s])') if NPM else None
+def pep503(name):
+    """PyPI's own name rule: case and runs of - _ . don't matter (Foo.Bar == foo-bar)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+checkrepo.MALICIOUS_NPM |= load("lists/npm.txt")
+NPM = checkrepo.MALICIOUS_NPM                   # built-in + this list + the detection feed
+PYPI = {pep503(n) for n in load("lists/pypi.txt") | set((checkrepo.FEED or {}).get("pypi", []))}
+PACKAGIST = load("lists/packagist.txt")
+PY_TOKEN_RE = re.compile(r"(?<![\w.-])[A-Za-z0-9][\w.-]*(?![\w.-])")
 NPM_FILES = ("package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock")
 PY_FILES = ("requirements.txt", "pyproject.toml", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock", "setup.py", "setup.cfg")
 PHP_FILES = ("composer.json", "composer.lock")
@@ -41,10 +49,10 @@ def scan_file(path, name):
     except OSError:
         return []
     hits = []
-    if name in NPM_FILES and NPM_RE:
-        hits += [("npm", m.group(1)) for m in NPM_RE.finditer(text)]
+    if name in NPM_FILES:
+        hits += [("npm", n) for n in sorted(checkrepo.npm_names_in(text))]
     if name in PY_FILES:
-        hits += [("pypi", n) for n in PYPI if re.search(r'(?<![\w.-])' + re.escape(n) + r'(?![\w.-])', text, re.I)]
+        hits += [("pypi", n) for n in sorted({pep503(m.group(0)) for m in PY_TOKEN_RE.finditer(text)} & PYPI)]
     if name in PHP_FILES:
         hits += [("packagist", n) for n in PACKAGIST if '"' + n + '"' in text]
     return hits

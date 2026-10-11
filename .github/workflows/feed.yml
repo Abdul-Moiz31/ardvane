@@ -1,0 +1,53 @@
+name: feed
+
+# Publishes Ardvane's signed detection feed when feed/indicators.json changes on main (see feed/README.md).
+#
+# The signing key is a secret of the `feed` environment, which only workflows on main can use, so a stolen GitHub
+# token (or a workflow on another branch) can't sign a feed. Every installed Ardvane checks the signature against the
+# public key in scanner/feed.py before it uses a single entry, and refuses a feed older than the one it has.
+on:
+  push:
+    branches: [main]
+    paths: ["feed/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feed
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: feed
+    permissions:
+      contents: write        # create the `feed` release and replace its one file; nothing else
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the feed from feed/indicators.json (checked with the app's own rules)
+        run: python3 .github/scripts/build_feed.py --out dist/indicators.json
+      - name: Sign it
+        env:
+          FEED_SIGNING_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+        run: |
+          [ -n "$FEED_SIGNING_KEY" ] || { echo "the feed environment has no FEED_SIGNING_KEY secret"; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/feed-key.pem"
+          printf '%s\n' "$FEED_SIGNING_KEY" > "$key"
+          openssl pkeyutl -sign -rawin -inkey "$key" -in dist/indicators.json -out dist/indicators.sig
+          rm -f "$key"
+          cat dist/indicators.sig dist/indicators.json > dist/indicators.signed
+      - name: Verify it exactly as installed copies will (public key built into Ardvane)
+        run: python3 -c "import sys; sys.path.insert(0, 'scanner'); import feed; print(feed.summary(feed.parse(open('dist/indicators.signed', 'rb').read())))"
+      - name: Publish it as the one file of the `feed` release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view feed --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 ||
+            gh release create feed --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "Detection feed" \
+              --notes "Ardvane's signed detection feed (see feed/README.md). Updated automatically; not a release of the app."
+          gh release upload feed dist/indicators.signed --repo "$GITHUB_REPOSITORY" --clobber

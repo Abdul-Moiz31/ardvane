@@ -64,7 +64,7 @@ if ($policy -in @('Undefined', 'Restricted', 'AllSigned') -and (Get-ExecutionPol
 Do-It 'copy scanner, hooks and safe-clone into %USERPROFILE%\.checkrepo' {
     New-Item -ItemType Directory -Force -Path "$Dest\bin", "$Dest\hooks" | Out-Null
     Copy-Item "$Scanner\checkrepo.py" "$Dest\checkrepo.py" -Force
-    foreach ($f in 'kitlib.py', 'github_check.py', 'autofix.py') { Copy-Item "$Scanner\$f" "$Dest\$f" -Force }   # shared helpers, GitHub check, fixer
+    foreach ($f in 'kitlib.py', 'github_check.py', 'autofix.py', 'feed.py', 'ed25519.py') { Copy-Item "$Scanner\$f" "$Dest\$f" -Force }   # helpers, GitHub check, fixer, signed detection feed
     Copy-Item "$Scanner\lists\malware-paths.txt" "$Dest\malware-paths.txt" -Force
     Copy-Item "$Scanner\safeclone\git-safeclone" "$Dest\bin\git-safeclone" -Force
     Copy-Item "$PSScriptRoot\safeclone.ps1" "$Dest\bin\safeclone.ps1" -Force

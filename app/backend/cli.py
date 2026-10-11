@@ -24,6 +24,7 @@ USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads throug
   {PROG} scan [--quick] [FOLDER ...]  read-only scan of this computer and your projects
   {PROG} check [FOLDER]               scan one folder before you open it: a download, a coding test, a colleague's repo
   {PROG} check-github REPO ...        scan every branch of GitHub repositories (owner/name or link) without cloning them
+  {PROG} update-detections            download the latest signed detection list now (scans and the daily check do this)
   {PROG} protect [--dry-run]          turn on protection: git hooks, safe clone, npm and editor hardening
   {PROG} unprotect                    remove protection and restore your previous settings
   {PROG} fixes [list | history | fix ID | undo ID]
@@ -129,6 +130,7 @@ COMMANDS = {
     "scan": lambda a: _call(actions.scan_command("--quick" in a, [x for x in a if x != "--quick"])),
     "check": lambda a: _scanner("checkrepo.py", a),
     "check-github": lambda a: _check_github(a),
+    "update-detections": lambda a: _scanner("feed.py", ["update"]),
     "protect": lambda a: _call(actions.installer_command("install", "--dry-run" in a)),
     "unprotect": lambda a: _call(actions.installer_command("uninstall")),
     "fixes": lambda a: _scanner("autofix.py", a or ["list"]),

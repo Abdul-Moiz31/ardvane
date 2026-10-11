@@ -44,15 +44,15 @@ def read_json(path, default):
         return default
 
 
-def write_json(path, value):
-    """Atomic write, readable only by this user. Each write uses its own temporary file, so two processes writing at
-    the same moment can't collide."""
+def write_atomic(path, data):
+    """Write bytes atomically, readable only by this user. Each write uses its own temporary file, so two processes
+    writing at the same moment can't collide, and a crash never leaves half a file."""
     folder = os.path.dirname(path)
     os.makedirs(folder, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=folder, prefix=os.path.basename(path) + ".", suffix=".tmp")   # mode 0600
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(value, f, indent=1)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -60,6 +60,10 @@ def write_json(path, value):
         except OSError:
             pass
         raise
+
+
+def write_json(path, value):
+    write_atomic(path, json.dumps(value, indent=1).encode("utf-8"))
 
 
 def setting(key, default=None):

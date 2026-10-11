@@ -37,7 +37,7 @@ foreach ($f in @($PROFILE, (Join-Path $HOME '.bashrc'))) {
 # 4. PATH and files (reports and quarantined downloads are kept so you can review them)
 $p = [Environment]::GetEnvironmentVariable('Path', 'User')
 if ($p) { [Environment]::SetEnvironmentVariable('Path', (($p -split ';') | Where-Object { $_ -and $_ -ne "$Dest\bin" }) -join ';', 'User') }
-foreach ($x in @("$Dest\bin", "$Dest\hooks", "$Dest\checkrepo.py", "$Dest\kitlib.py", "$Dest\github_check.py", "$Dest\github-seen.json", "$Dest\autofix.py", "$Dest\malware-paths.txt", "$Dest\daily-check.ps1", "$Dest\fingerprints.txt", "$Dest\hooks-enabled", "$Dest\previous-hooksPath")) {
+foreach ($x in @("$Dest\bin", "$Dest\hooks", "$Dest\checkrepo.py", "$Dest\kitlib.py", "$Dest\github_check.py", "$Dest\github-seen.json", "$Dest\autofix.py", "$Dest\feed.py", "$Dest\ed25519.py", "$Dest\indicators.signed", "$Dest\malware-paths.txt", "$Dest\daily-check.ps1", "$Dest\fingerprints.txt", "$Dest\hooks-enabled", "$Dest\previous-hooksPath")) {
     if (Test-Path $x) { Remove-Item -Recurse -Force $x }
 }
 if (Test-Path $Dest) {

@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, docs, fixes, launcher, reports, settings, status, tasks
+from . import actions, detections, docs, fixes, launcher, reports, settings, status, tasks
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
 from .scanjob import ScanJob
 
@@ -74,9 +74,9 @@ def get_state(q):
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
-                         "github_repos": s["github_repos"], "folders": folders,
+                         "github_repos": s["github_repos"], "feed_updates": s["feed_updates"], "folders": folders,
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
-            "scan": App.scan_state(s["dismissed"])}
+            "feed": detections.status(), "scan": App.scan_state(s["dismissed"])}
 
 
 def get_scan(q):
@@ -129,7 +129,8 @@ def post_scan(b):
         user, repos = s["github_user"], s["github_repos"]
         if not user and not repos:
             raise ApiError(400, "add your GitHub username or a repository in Settings first")
-    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, repos, on_finish=_after_scan)
+    App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, repos, on_finish=_after_scan,
+                      update_feed=settings.load()["feed_updates"])
     return {"scan": App.job.state()}
 
 
@@ -225,6 +226,10 @@ def post_task(b):
     return task_list()
 
 
+def post_feed_update(b):
+    return detections.update()
+
+
 def post_pick_folder(b):
     return actions.pick_folder()
 
@@ -239,6 +244,8 @@ def post_settings(b):
                 s["github_repos"] = settings.change_list(s["github_repos"], b["github_repos"], settings.clean_github_repos)
             if "github_enabled" in b:
                 s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
+            if "feed_updates" in b:
+                s["feed_updates"] = bool(b["feed_updates"])
             if "autofix" in b:
                 if b["autofix"] not in settings.AUTOFIX_MODES:
                     raise ValueError("unknown fix mode")
@@ -297,7 +304,7 @@ def post_quit(b):
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
               "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
-               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/settings": post_settings,
+               "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit}
 
 

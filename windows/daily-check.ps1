@@ -73,6 +73,13 @@ if ($hits) { $hits | ForEach-Object { Bad "connection to $($_.RemoteAddress):$($
 
 # 5. projects
 Add-Line '5. Projects (checkrepo)'
+# new detections first: the signed feed (feed.py) - on unless turned off in the dashboard's Settings
+$feedOn = $true
+try { $stF = Get-Content "$Dest\settings.json" -Raw -ErrorAction Stop | ConvertFrom-Json; if ($stF.feed_updates -eq $false) { $feedOn = $false } } catch { }
+if ($py -and $feedOn -and (Test-Path "$Dest\feed.py")) {
+    $feedLine = Invoke-Native { & $py.Exe @($py.Args) "$Dest\feed.py" update 2>&1 } | Select-Object -First 1
+    if ($feedLine) { Add-Line "  $feedLine" }
+}
 $py = $null
 foreach ($c in 'py', 'python', 'python3') {
     $cmd = Get-Command $c -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
