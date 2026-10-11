@@ -95,6 +95,7 @@ export function protectionItems(p) {
   return [
     { key: 'hooks', on: p.installed && p.hooks },
     { key: 'safeclone', on: p.safeclone },
+    { key: 'safeinstall', on: p.safeinstall },
     { key: 'npm', on: p.npm !== false },
     { key: 'editors', on: p.editors.every(/** @param {any} e */ e => e.auto_tasks_off && e.trust_on) },
     { key: 'routine', on: p.routine.on },

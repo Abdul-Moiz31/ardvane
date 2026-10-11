@@ -25,7 +25,7 @@ The dashboard closes itself about 20 minutes after you stop using it. Clicking t
 | **Overview** | The security dashboard: one status, four numbers (threats, items to review, protection, next daily check), a single "Needs your attention" list combining fixes and to-dos, and the last 30 days as a chart. |
 | **To-do** | Concrete steps, each with a checkbox. Every finding becomes a short checklist, a DANGER opens the full recovery checklist (in the guide's order), one-time setup steps (2FA, Vigilant mode, rulesets…) and weekly / monthly routine checks. |
 | **Scan** | Full or quick scan; your whole home folder or only your project folders; optionally your GitHub account and the repositories you listed. Live progress, then the results grouped by check, with *Show in Finder / Explorer* and *What to do* buttons. Mark harmless warnings as yours to hide them next time. |
-| **Protection** | Turn on the git hooks, safe clone, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
+| **Protection** | Turn on the git hooks, safe clone, safe install, npm and editor hardening. You see the exact changes before anything happens, and **Remove protection** undoes all of it. |
 | **Reports** | Every daily check and scan, with a 90-day chart. |
 | **Learn** | All the guides from `docs/`, readable offline. |
 | **Settings** | Daily check time (09:00 by default), which folders are scanned (added with Finder / the Windows folder picker), what the app may fix for you, the optional GitHub check and repositories to scan, and the signed detection list (see below). |
@@ -112,6 +112,22 @@ From the terminal: `ardvane check-github owner/name [more ...]` scans every bran
 `python3 scanner/github_check.py <username>` checks an account. Add `--all-branches` to scan every branch of an
 account's repositories (the worm pushes into all of them), `--days N` to look further back, `--max-repos N` to scan
 more repositories in one run, and `--rescan` to scan again what was already clean.
+
+## Safe install
+
+With protection on, `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` check packages before they install:
+
+- **What is checked:** the packages you name and everything in the project's lockfile. When npm adds packages, the
+  full dependency tree is worked out first in a private copy of the project (package metadata only: nothing runs and
+  none of your files change). pip checks the packages you name and your requirement files.
+- **Against:** Ardvane's own list (built in, plus the signed detection list) and, unless you turn it off under
+  **Settings → Detections**, [OSV.dev](https://osv.dev)'s database of malicious packages. Only public package names and
+  versions are sent; packages from a private registry never are. Answers are cached for a day.
+- **If a package is known malware, nothing is installed.** If only some versions of a package were malicious and the
+  version isn't known yet, you get a warning instead.
+- **It never breaks your package manager:** commands that don't install (`npm run dev`) pass straight through, and if
+  the check itself fails, the command runs as normal. Bypass once, only if you are sure: `command npm install ...`
+  (PowerShell: `npm.cmd install ...`).
 
 ## Detections that keep up
 

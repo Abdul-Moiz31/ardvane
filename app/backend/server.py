@@ -74,7 +74,8 @@ def get_state(q):
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
-                         "github_repos": s["github_repos"], "feed_updates": s["feed_updates"], "folders": folders,
+                         "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
+                         "package_lookups": s["package_lookups"], "folders": folders,
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
             "feed": detections.status(), "scan": App.scan_state(s["dismissed"])}
 
@@ -244,8 +245,9 @@ def post_settings(b):
                 s["github_repos"] = settings.change_list(s["github_repos"], b["github_repos"], settings.clean_github_repos)
             if "github_enabled" in b:
                 s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
-            if "feed_updates" in b:
-                s["feed_updates"] = bool(b["feed_updates"])
+            for key in ("feed_updates", "package_lookups"):     # on/off switches
+                if key in b:
+                    s[key] = bool(b[key])
             if "autofix" in b:
                 if b["autofix"] not in settings.AUTOFIX_MODES:
                     raise ValueError("unknown fix mode")

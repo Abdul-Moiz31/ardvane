@@ -34,7 +34,7 @@ def pep503(name):
 
 checkrepo.MALICIOUS_NPM |= load("lists/npm.txt")
 NPM = checkrepo.MALICIOUS_NPM                   # built-in + this list + the detection feed
-PYPI = {pep503(n) for n in load("lists/pypi.txt") | set((checkrepo.FEED or {}).get("pypi", []))}
+PYPI = {pep503(n) for n in load("lists/pypi.txt")} | checkrepo.MALICIOUS_PYPI                  # + the detection feed
 PACKAGIST = load("lists/packagist.txt")
 PY_TOKEN_RE = re.compile(r"(?<![\w.-])[A-Za-z0-9][\w.-]*(?![\w.-])")
 NPM_FILES = ("package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock")

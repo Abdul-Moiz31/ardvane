@@ -125,6 +125,13 @@ MALICIOUS_NPM = {
 PKG_TOKEN_RE = re.compile(r'(?:node_modules/|npm:|(?m:^)[ \t]*/|(?<![\w@/.~-]))((?:@[\w.~-]+/)?[\w.~-]+)(?=["\'@:\s])')
 
 
+# Malicious PyPI packages (PEP 503 names: lower case, - for any run of - _ .). Kept equal to lists/pypi.txt by the
+# self-test; the detection feed adds more.
+MALICIOUS_PYPI = {
+    "pybitjs", "pyservercheck",
+}
+
+
 def npm_names_in(text):
     """Known-malicious npm packages named in a lockfile or manifest."""
     return {m.group(1) for m in PKG_TOKEN_RE.finditer(text)} & MALICIOUS_NPM
@@ -150,6 +157,7 @@ if FEED:
     MARKER_STRINGS += [m for m in FEED["markers"] if m not in MARKER_STRINGS]
     C2_IP_SET |= set(FEED["ips"])
     MALICIOUS_NPM |= set(FEED["npm"])
+    MALICIOUS_PYPI |= set(FEED["pypi"])
 
 # ---------------------------------------------------------------- file classes
 SKIP_DIRS = {".git", "node_modules", "bower_components", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache"}
@@ -248,7 +256,8 @@ PROJECT_DIR_RE = re.compile(r"^(?:\$\{?(?:CLAUDE_PROJECT_DIR|workspaceFolder|PWD
 # ---------------------------------------------------------------- small helpers
 def load_hashes(path):
     try:
-        return {l.split()[0].lower() for l in open(path) if l.strip() and not l.startswith("#")}
+        with open(path) as f:
+            return {l.split()[0].lower() for l in f if l.strip() and not l.startswith("#")}
     except OSError:
         return set()
 

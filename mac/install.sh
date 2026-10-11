@@ -6,11 +6,12 @@
 #   ~/.checkrepo/bin/checkrepo       `checkrepo` command
 #   ~/.checkrepo/hooks/*             global git hooks (scan after clone/pull/checkout, block infected pushes)
 #   ~/.checkrepo/bin/git-safeclone   safe `git clone` (scans before any project file is written)
+#   ~/.checkrepo/bin/safe-install    safe npm / npx / pnpm / yarn / bun / pip installs (known malicious packages are blocked)
 # and hardens:
 #   npm  -> ignore-scripts=true (packages can't run install scripts)
 #   VS Code / Cursor / Windsurf -> automatic tasks off, Workspace Trust on
 #
-# Usage:  bash install.sh [--dry-run] [--no-npm] [--no-editor] [--no-safeclone] [--force-hooks]
+# Usage:  bash install.sh [--dry-run] [--no-npm] [--no-editor] [--no-safeclone] [--no-safe-install] [--force-hooks]
 # Re-running is safe. Undo everything with: bash uninstall.sh
 #
 # --- end of help ---
@@ -19,9 +20,9 @@ set -u
 KIT="$(cd "$(dirname "$0")/.." && pwd)"   # repository root
 SCANNER="$KIT/scanner"
 DEST="$HOME/.checkrepo"
-DRY=0; NPM=1; EDITOR_HARDEN=1; SAFECLONE=1; FORCE_HOOKS=0
+DRY=0; NPM=1; EDITOR_HARDEN=1; SAFECLONE=1; SAFEINSTALL=1; FORCE_HOOKS=0
 for a in "$@"; do case "$a" in
-  --dry-run) DRY=1 ;; --no-npm) NPM=0 ;; --no-editor) EDITOR_HARDEN=0 ;; --no-safeclone) SAFECLONE=0 ;;
+  --dry-run) DRY=1 ;; --no-npm) NPM=0 ;; --no-editor) EDITOR_HARDEN=0 ;; --no-safeclone) SAFECLONE=0 ;; --no-safe-install) SAFEINSTALL=0 ;;
   --force-hooks) FORCE_HOOKS=1 ;; -h|--help) sed -n '2,/^# --- end of help/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown option: $a (see --help)"; exit 3 ;; esac; done
 
@@ -53,11 +54,13 @@ run cp "$SCANNER/checkrepo.py" "$DEST/checkrepo.py"
 run cp "$SCANNER/hooks/dispatch" "$DEST/hooks/dispatch"
 run chmod 755 "$DEST/hooks/dispatch"
 run cp "$SCANNER/safeclone/git-safeclone" "$DEST/bin/git-safeclone"
-for f in kitlib.py github_check.py autofix.py feed.py ed25519.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # helpers, GitHub check, fixer, signed detection feed
+for f in kitlib.py github_check.py autofix.py feed.py ed25519.py safeinstall.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # helpers, GitHub check, fixer, signed detection feed, safe install
 run cp "$SCANNER/lists/malware-paths.txt" "$DEST/malware-paths.txt"
 run chmod 755 "$DEST/bin/git-safeclone"
-if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo"; else
-  printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$DEST/checkrepo.py" > "$DEST/bin/checkrepo" && chmod 755 "$DEST/bin/checkrepo" || die "could not create the checkrepo command"
+if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo and ~/.checkrepo/bin/safe-install"; else
+  for cmd in checkrepo:checkrepo.py safe-install:safeinstall.py; do
+    printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$DEST/${cmd#*:}" > "$DEST/bin/${cmd%%:*}" && chmod 755 "$DEST/bin/${cmd%%:*}" || die "could not create the ${cmd%%:*} command"
+  done
 fi
 for h in applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit prepare-commit-msg commit-msg \
          post-commit pre-rebase post-checkout post-merge pre-push pre-receive update proc-receive post-receive \
@@ -90,6 +93,10 @@ if [ $SAFECLONE -eq 1 ]; then
 # safe clone: scans before writing project files (bypass once with: command git clone ...)
 function git { if [ \"\$1\" = \"clone\" ]; then shift; git-safeclone \"\$@\"; else command git \"\$@\"; fi; }"
 fi
+if [ $SAFEINSTALL -eq 1 ]; then
+  block="$block
+$(cat "$SCANNER/shell/safe-install.sh")"
+fi
 block="$block
 $END"
 rcs=()
@@ -109,6 +116,7 @@ open(rc, "w").write(s.rstrip("\n") + ("\n\n" if s.strip() else "") + block + "\n
 PYEOF
   ok "updated ${rc/#$HOME/~} (original kept as $(basename "$rc").bak-checkrepo)"
 done
+[ $SAFEINSTALL -eq 1 ] && ok "safe install on: npm, npx, pnpm, yarn, bun and pip check packages for known malware first (in new terminals)"
 
 # ---------------------------------------------------------------- npm
 if [ $NPM -eq 1 ] && command -v npm >/dev/null; then

@@ -30,6 +30,10 @@ jobs:
         run: python scanner/tests/test_autofix.py
       - name: Git hooks (push scans the commits being pushed, never the working folder)
         run: python scanner/tests/test_hooks.py
+      - name: Safe install (what each command installs, offline OSV stand-in, the shell functions)
+        run: python scanner/tests/test_safeinstall.py
+      - name: GitHub Action driver (annotations, summary, exit codes, no workflow-command injection)
+        run: python scanner/tests/test_ci.py
       - name: Detection feed (signatures, strict content checks, no rollback) and its source file
         run: |
           python scanner/tests/test_feed.py
@@ -37,6 +41,22 @@ jobs:
       - name: Python 3.8 syntax level (scanner, GitHub check, dashboard backend)
         shell: bash
         run: for f in scanner/*.py app/dashboard.py app/backend/*.py; do python -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), feature_version=(3, 8))" "$f" || exit 1; done
+
+  action:
+    # the Action from action.yml, run on this repository exactly as other repositories will use it
+    name: GitHub Action (scans this repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan with the Action
+        id: ardvane
+        uses: ./
+      - name: It must report its findings
+        env:
+          DANGER: ${{ steps.ardvane.outputs.danger }}
+        run: test "$DANGER" = "0"
 
   dashboard:
     name: dashboard backend (${{ matrix.os }})
