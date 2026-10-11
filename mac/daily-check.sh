@@ -95,9 +95,17 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
       *) chk "could not scan $where (${line#* }) — run: checkrepo \"$where\"" ;;
     esac
   }
+  # repo_hooks DIR: a repository can switch Ardvane's hooks off for itself with its own core.hooksPath. Husky and
+  # lefthook point it at a folder inside the repo (fine); pointing it anywhere else (e.g. /dev/null) is not.
+  repo_hooks() {
+    local hp top real
+    hp="$(git -C "$1" config --local --get core.hooksPath 2>/dev/null)" || return 0
+    top="$(cd "$1" && pwd -P)"; real="$(cd "$1" && cd "${hp/#\~/$HOME}" 2>/dev/null && pwd -P)"
+    case "$real" in "$top"/*) ;; *) chk "git hooks are switched off in ${1/#$HOME/~} (its core.hooksPath='$hp'), so clones and pushes there aren't checked" ;; esac
+  }
   repos=0
   [ ${#roots[@]} -gt 0 ] && while IFS= read -r g; do
-    repos=$((repos+1)); scan_dir "$(dirname "$g")"
+    repos=$((repos+1)); scan_dir "$(dirname "$g")"; repo_hooks "$(dirname "$g")"
   done < <(find "${roots[@]}" -maxdepth 5 -name .git -type d -not -path "*/node_modules/*" 2>/dev/null)
   if [ $repos -eq 0 ]; then chk "scanned 0 repositories — nothing was checked. List your project folders in ~/.checkrepo/projects.txt"
   else out "  scanned $repos repositories"; fi
@@ -109,15 +117,34 @@ fi
 # ---------------------------------------------------------------- 6. protections still on
 out "6. Protections"
 n=$danger; nw=$warn
-hp="$(git config --global --get core.hooksPath 2>/dev/null)"
+# --includes: the value git really uses, even when it comes from an [include]d file
+hp="$(git config --global --includes --get core.hooksPath 2>/dev/null)"
 if [ "$hp" != "$DEST/hooks" ]; then
   if [ -f "$DEST/hooks-enabled" ]; then bad "TAMPERED: global git hooks were turned off (core.hooksPath='$hp') — re-run the installer"
   else chk "git hooks are not enabled (you kept your own hooks folder) — clones/pushes aren't scanned automatically"; fi
+elif [ -f "$DEST/hooks-enabled" ]; then
+  # every hook must still be the dispatcher: a link to it (macOS/Linux) or an identical copy
+  for h in pre-push post-checkout post-merge post-rewrite; do
+    f="$DEST/hooks/$h"
+    if [ ! -e "$f" ]; then bad "TAMPERED: the git hook $h was removed — re-run the installer"
+    elif [ -L "$f" ]; then [ "$(readlink "$f")" = "dispatch" ] || bad "TAMPERED: the git hook $h now runs $(readlink "$f") instead of Ardvane"
+    elif ! cmp -s "$f" "$DEST/hooks/dispatch"; then bad "TAMPERED: the git hook $h was replaced"; fi
+  done
 fi
+# [includeIf "gitdir:..."] only applies inside matching repos, so --includes above can't see it: read each included file
+while IFS= read -r inc; do
+  f="${inc/#\~/$HOME}"; v="$(git config --file "$f" --get core.hooksPath 2>/dev/null)"
+  [ -n "$v" ] && [ "$v" != "$DEST/hooks" ] && bad "TAMPERED: ${f/#$HOME/~} (included by your git config) sets core.hooksPath='$v', which turns Ardvane's hooks off"
+done < <(git config --global --get-regexp '^include(if\..*)?\.path$' 2>/dev/null | cut -d' ' -f2-)
 if [ -f "$DEST/fingerprints.txt" ]; then
   while read -r sum file; do
-    [ -f "$file" ] && [ "$(shasum -a 256 "$file" | cut -d' ' -f1)" != "$sum" ] && bad "TAMPERED: ${file/#$HOME/~} was modified"
+    if [ ! -f "$file" ]; then bad "TAMPERED: ${file/#$HOME/~} was deleted"
+    elif [ "$(shasum -a 256 "$file" | cut -d' ' -f1)" != "$sum" ]; then bad "TAMPERED: ${file/#$HOME/~} was modified"; fi
   done < "$DEST/fingerprints.txt"
+fi
+# the shell setup (checkrepo command, safe clone) lives in a marked block of your shell profile
+if [ -f "$DEST/hooks-enabled" ] && ! grep -qsF "# >>> polinrider-survival-kit >>>" "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; then
+  chk "Ardvane's shell setup is missing from your shell profile, so safe clone is off — re-run the installer"
 fi
 command -v npm >/dev/null && [ "$(npm config get ignore-scripts 2>/dev/null)" != "true" ] && chk "npm ignore-scripts is off"
 s="$HOME/Library/Application Support/Code/User/settings.json"

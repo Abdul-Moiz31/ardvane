@@ -102,15 +102,23 @@ if ($py -and (Test-Path "$Dest\checkrepo.py")) {
 
 # 6. protections
 Add-Line '6. Protections'; $n = $script:danger; $nw = $script:warn
-$hp = Invoke-Native { git config --global --get core.hooksPath 2>$null }
+$hp = Invoke-Native { git config --global --includes --get core.hooksPath 2>$null }   # what git really uses
 if ($hp -ne (($Dest -replace '\\', '/') + '/hooks')) {
     if (Test-Path "$Dest\hooks-enabled") { Bad "TAMPERED: global git hooks were turned off (core.hooksPath='$hp') - re-run the installer" }
     else { Chk 'git hooks are not enabled (you kept your own hooks folder) - clones/pushes are not scanned automatically' }
 }
-if (Test-Path "$Dest\fingerprints.txt") {
+# [includeIf "gitdir:..."] only applies inside matching repos, so read each included file
+foreach ($inc in @(Invoke-Native { git config --global --get-regexp '^include(if\..*)?\.path$' 2>$null })) {
+    $f = ($inc -split ' ', 2)[1] -replace '^~', $HOME
+    $v = Invoke-Native { git config --file $f --get core.hooksPath 2>$null }
+    if ($v -and $v -ne (($Dest -replace '\\', '/') + '/hooks')) { Bad "TAMPERED: $f (included by your git config) sets core.hooksPath='$v', which turns Ardvane's hooks off" }
+}
+if (Test-Path "$Dest\fingerprints.txt") {   # the hooks are copies on Windows, so each one is fingerprinted
     foreach ($l in Get-Content "$Dest\fingerprints.txt") {
         $sum, $file = $l -split ' ', 2
-        if ($file -and (Test-Path $file) -and ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLower() -ne $sum)) { Bad "TAMPERED: $file was modified" }
+        if (-not $file) { continue }
+        if (-not (Test-Path $file)) { Bad "TAMPERED: $file was deleted" }
+        elseif ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLower() -ne $sum) { Bad "TAMPERED: $file was modified" }
     }
 }
 if ((Get-Command npm -ErrorAction SilentlyContinue) -and ((Invoke-Native { npm config get ignore-scripts }) -ne 'true')) { Chk 'npm ignore-scripts is off' }

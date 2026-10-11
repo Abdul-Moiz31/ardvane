@@ -4,36 +4,64 @@
 #   git config --global core.hooksPath ~/.checkrepo/hooks
 #
 # 1) After clone / pull / branch switch: run the read-only malware scan (checkrepo) and warn.
-# 2) Before push: block the push if malware is found, so it can't spread to GitHub from this machine.
+# 2) Before push: scan the commits being pushed and block the push if one contains malware, so it can't spread to
+#    GitHub from this machine. (Not the working folder: what matters is what leaves, whichever branch is checked out.)
 # 3) Then hand over to the repository's own hook in .git/hooks/<name>, so per-repo hooks keep working.
 # Repos that set their own core.hooksPath (Husky, lefthook) bypass this file — the daily routine covers them.
 # Works on macOS, Linux and Git for Windows (which runs hooks with its bundled bash).
 # To use it from your own hook instead, call it by hook name, e.g.  ~/.checkrepo/hooks/pre-push "$@" || exit 1
+#
+# checkrepo exit codes: 0 clean, 1 malware, 2 worth a look, 4 the scan could not finish (reported, never blocks).
 
 name="$(basename "$0")"
 CHECKREPO="${CHECKREPO:-$HOME/.checkrepo/checkrepo.py}"
 
-scan() {
+# run_scan ARGS...: checkrepo --quiet ARGS; returns its exit code, or 0 if Python or the scanner is missing.
+run_scan() {
   [ -f "$CHECKREPO" ] || return 0
   local py=""
   for c in python3 python py; do   # test each: on Windows "python3" may be a Microsoft Store stub that doesn't run
     if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then py="$c"; break; fi
   done
   [ -n "$py" ] || return 0
-  "$py" "$CHECKREPO" --quiet "$(git rev-parse --show-toplevel 2>/dev/null)" >&2
+  "$py" "$CHECKREPO" --quiet "$@" </dev/null >&2   # never let the scan read the hook's stdin (git's ref list)
+}
+
+# scan_commit SHA: scan the files of one commit in a private folder, without touching the working tree or index.
+scan_commit() {
+  local tmp rc
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/ardvane-push.XXXXXX")" && tmp="$(cd "$tmp" && pwd)" || return 4   # normalised: no "//"
+  if GIT_INDEX_FILE="$tmp.index" git read-tree "$1" 2>/dev/null &&
+     GIT_LFS_SKIP_SMUDGE=1 GIT_INDEX_FILE="$tmp.index" git -c core.fsmonitor=false checkout-index -a -f --prefix="$tmp/" 2>/dev/null; then
+    run_scan --all-files "$tmp" 2>&1 | sed "s#$tmp#commit $(git rev-parse --short "$1") (being pushed)#" >&2
+    rc=${PIPESTATUS[0]}
+  else
+    rc=4
+  fi
+  rm -rf "$tmp" "$tmp.index"
+  return $rc
 }
 
 case "$name" in
   post-checkout)
     # $3 = 1 for a branch checkout / clone, 0 for a single-file checkout
-    [ "$3" = "1" ] && scan
+    [ "$3" = "1" ] && run_scan "$(git rev-parse --show-toplevel 2>/dev/null)"
     ;;
   post-merge|post-rewrite)
-    scan
+    run_scan "$(git rev-parse --show-toplevel 2>/dev/null)"
     ;;
   pre-push)
-    scan
-    case $? in
+    # git sends "<local ref> <local sha> <remote ref> <remote sha>" per ref on stdin; keep it for the repo's own hook
+    refs="$(cat)"
+    result=0
+    for sha in $(printf '%s\n' "$refs" | awk '$2 !~ /^0+$/ { print $2 }' | sort -u); do   # skip branch deletions
+      scan_commit "$sha"
+      case $? in
+        1) result=1 ;;
+        4) [ $result -eq 0 ] && result=4 ;;
+      esac
+    done
+    case $result in
       1) printf '\033[1;31m%s\033[0m\n' "PUSH BLOCKED by malware check. Nothing was sent." >&2
          echo "   If you are 100% sure this is a false alarm: git push --no-verify" >&2
          exit 1 ;;
@@ -44,6 +72,11 @@ esac
 
 local_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/$name"
 if [ -x "$local_hook" ]; then
+  if [ "$name" = "pre-push" ]; then
+    [ -n "$refs" ] && refs="$refs"$'\n'
+    printf '%s' "$refs" | "$local_hook" "$@"
+    exit $?
+  fi
   exec "$local_hook" "$@"
 fi
 exit 0
