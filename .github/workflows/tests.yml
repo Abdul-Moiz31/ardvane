@@ -28,6 +28,8 @@ jobs:
         run: python scanner/tests/test_github_check.py
       - name: Fixer (quarantine, undo, refusal of protected paths, modes)
         run: python scanner/tests/test_autofix.py
+      - name: Git hooks (push scans the commits being pushed, never the working folder)
+        run: python scanner/tests/test_hooks.py
       - name: Python 3.8 syntax level (scanner, GitHub check, dashboard backend)
         shell: bash
         run: for f in scanner/*.py app/dashboard.py app/backend/*.py; do python -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read(), feature_version=(3, 8))" "$f" || exit 1; done

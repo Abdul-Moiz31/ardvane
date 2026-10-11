@@ -23,6 +23,15 @@ every way that worked is now caught, and covered by a test.
 - Safe clone now scans committed `node_modules` / `.venv` folders too, and prints the right command for a false alarm.
 - New `checkrepo --summary` for scripts. No new false alarms on 90,000 real project files.
 
+**Git protection checks what you push, and notices when it is switched off.**
+
+- `git push` scans the commits being pushed, not the folder you happen to have open: an infected branch is blocked
+  even while a clean branch is checked out, and untracked files no longer block unrelated pushes. Your own pre-push
+  hooks still receive the list of refs.
+- The daily check now notices protection being turned off from an `[include]`/`[includeIf]` file, a git hook replaced
+  or removed, a protection file deleted, a repository switching hooks off for itself (Husky folders are fine), and
+  the shell setup being removed.
+
 ## 0.2.2
 
 **The GitHub check now sees everything.** It used to stop at your first 100 repositories and skip repositories over
