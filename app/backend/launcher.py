@@ -35,16 +35,22 @@ def _mac():
     macos, resources = os.path.join(bundle, "Contents", "MacOS"), os.path.join(bundle, "Contents", "Resources")
     os.makedirs(macos, exist_ok=True)
     os.makedirs(resources, exist_ok=True)
+    # An app whose program is a script has no chip type, so on Apple Silicon macOS may start it under Rosetta (Intel),
+    # and everything it starts inherits that: git then fails to load Apple's arm64-only command line tools ("xcrun:
+    # need 'x86_64'"). Info.plist below asks for native execution, and the script re-starts itself natively too.
+    native = ('if [ "$(uname -m)" = x86_64 ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then\n'
+              '  exec /usr/bin/arch -arm64 /bin/sh "$0" "$@"\n'
+              'fi\n')
     command = installed_command()
     if command:      # installed: the `ardvane` command finds its own Python
-        script = f"#!/bin/sh\n# Opens the {APP_NAME} dashboard\n{shlex.quote(command)} >/dev/null 2>&1 &\n"
+        script = f"#!/bin/sh\n# Opens the {APP_NAME} dashboard\n{native}{shlex.quote(command)} >/dev/null 2>&1 &\n"
     else:            # a clone: try the Python that created the icon first, then the usual places
         candidates = " ".join(shlex.quote(c) for c in [python_exe(), "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"])
-        script = (f"#!/bin/sh\n# Opens the {APP_NAME} dashboard\n"
+        script = (f"#!/bin/sh\n# Opens the {APP_NAME} dashboard\n{native}"
                   f"for p in {candidates}; do\n"
                   f"  if [ -x \"$p\" ]; then ARDVANE_KIT={shlex.quote(KIT)} \"$p\" {shlex.quote(ENTRY)} >/dev/null 2>&1 & exit 0; fi\n"
                   "done\n"
-                  "osascript -e 'display alert \"Python 3 was not found\" message \"Install it with: xcode-select --install\"'\n")
+                  "osascript -e 'display alert \"Python 3 was not found\" message \"Install it with: brew install python\"'\n")
     exe = os.path.join(macos, APP_ID)
     with open(exe, "w", encoding="utf-8") as f:
         f.write(script)
@@ -53,7 +59,8 @@ def _mac():
                    os.path.join(resources, "AppIcon.icns")], timeout=60)[0] == 0
     info = {"CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME, "CFBundleIdentifier": "dev.ardvane.dashboard",
             "CFBundleExecutable": APP_ID, "CFBundlePackageType": "APPL", "CFBundleShortVersionString": VERSION,
-            "LSUIElement": True, "LSMinimumSystemVersion": "10.13"}
+            "LSUIElement": True, "LSMinimumSystemVersion": "10.13",
+            "LSRequiresNativeExecution": True, "LSArchitecturePriority": ["arm64", "x86_64"]}   # never under Rosetta
     if icon_ok:
         info["CFBundleIconFile"] = "AppIcon"
     with open(os.path.join(bundle, "Contents", "Info.plist"), "wb") as f:
