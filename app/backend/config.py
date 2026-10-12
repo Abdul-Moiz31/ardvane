@@ -4,7 +4,7 @@ import sys
 
 APP_NAME = "Ardvane"                      # the product name lives here and in ui/index.html
 APP_ID = "ardvane"
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KIT = os.environ.get("ARDVANE_KIT") or os.environ.get("POLINRIDER_KIT") or os.path.dirname(APP_DIR)

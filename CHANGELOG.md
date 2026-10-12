@@ -3,6 +3,14 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.3.2
+
+- **The app icon starts Ardvane natively on Apple Silicon Macs.** An app whose program is a script has no chip type,
+  so macOS could start it under Rosetta, and everything Ardvane ran inherited that: "Update protection" then failed
+  with `xcrun: … need 'x86_64'` because git couldn't load Apple's command line tools. The icon now asks macOS for
+  native execution and starts Ardvane natively itself. **Re-create the icon once** (Protection → Ardvane app icon →
+  Remove, then Add) to get the fixed one.
+
 ## 0.3.1
 
 - **"Update protection" works when Ardvane is opened from its app icon.** macOS gives apps started from an icon a
