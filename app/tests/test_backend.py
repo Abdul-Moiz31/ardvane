@@ -139,6 +139,11 @@ class Settings(unittest.TestCase):
 
 
 
+def T(name):
+    """A folder in the sandbox home as settings stores it: ~/name (~\\name on Windows)."""
+    return os.path.join("~", name)
+
+
 class Folders(unittest.TestCase):
     """Project folders: adding and removing always works, even when a listed folder is gone, and every spelling of
     a folder is the same entry. The default list contains folders this computer may not have (~/code, ~/projects)."""
@@ -153,31 +158,31 @@ class Folders(unittest.TestCase):
             shutil.rmtree(os.path.join(SANDBOX, d), ignore_errors=True)
 
     def test_defaults_show_only_folders_that_exist(self):
-        self.assertEqual(settings.load_folders(), (["~/Documents"], False))
+        self.assertEqual(settings.load_folders(), ([T("Documents")], False))
 
     def test_add_works_when_defaults_include_missing_folders(self):
-        self.assertEqual(settings.change_folders({"add": "~/work"}), ["~/Documents", "~/work"])
-        self.assertEqual(settings.load_folders(), (["~/Documents", "~/work"], True))
+        self.assertEqual(settings.change_folders({"add": "~/work"}), [T("Documents"), T("work")])
+        self.assertEqual(settings.load_folders(), ([T("Documents"), T("work")], True))
 
     def test_add_picker_path_and_other_spellings_are_one_entry(self):
         settings.change_folders({"add": os.path.join(SANDBOX, "work")})
         settings.change_folders({"add": "~/work/"})
         settings.change_folders({"add": "~/other/../work"})
-        self.assertEqual(settings.load_folders()[0], ["~/Documents", "~/work"])
+        self.assertEqual(settings.load_folders()[0], [T("Documents"), T("work")])
 
     def test_adding_a_missing_or_invalid_folder_is_refused_and_changes_nothing(self):
         settings.change_folders({"add": "~/work"})
         for bad in ("~/nope", "work", "", "~/a\nb", "~/a#b", os.path.join(SANDBOX, "Documents", "file.txt")):
             with self.assertRaises(ValueError, msg=bad):
                 settings.change_folders({"add": bad})
-        self.assertEqual(settings.load_folders()[0], ["~/Documents", "~/work"])
+        self.assertEqual(settings.load_folders()[0], [T("Documents"), T("work")])
 
     def test_remove_works_even_when_a_listed_folder_is_gone(self):
         os.makedirs(os.path.join(SANDBOX, "gone"))
         settings.change_folders({"add": "~/gone"})
         shutil.rmtree(os.path.join(SANDBOX, "gone"))                 # e.g. an unplugged drive
-        self.assertEqual(settings.change_folders({"remove": "~/Documents"}), ["~/gone"])
-        self.assertEqual(settings.folder_info(["~/gone"]), [{"path": "~/gone", "exists": False}])
+        self.assertEqual(settings.change_folders({"remove": "~/Documents"}), [T("gone")])
+        self.assertEqual(settings.folder_info([T("gone")]), [{"path": T("gone"), "exists": False}])
         self.assertEqual(settings.change_folders({"remove": os.path.join(SANDBOX, "gone")}), [])
         self.assertEqual(settings.load_folders(), ([], True))           # an empty list is a choice, kept as such
 
@@ -185,24 +190,24 @@ class Folders(unittest.TestCase):
         os.makedirs(os.path.join(SANDBOX, "gone"))
         settings.change_folders({"add": "~/gone"})
         shutil.rmtree(os.path.join(SANDBOX, "gone"))
-        self.assertEqual(settings.change_folders({"add": "~/work"}), ["~/Documents", "~/gone", "~/work"])
+        self.assertEqual(settings.change_folders({"add": "~/work"}), [T("Documents"), T("gone"), T("work")])
 
     def test_reset_goes_back_to_the_defaults(self):
         settings.change_folders({"add": "~/work"})
-        self.assertEqual(settings.change_folders({"reset": True}), ["~/Documents"])
+        self.assertEqual(settings.change_folders({"reset": True}), [T("Documents")])
         self.assertFalse(os.path.exists(config.PROJECTS))
-        self.assertEqual(settings.change_folders({"reset": True}), ["~/Documents"])    # twice is fine
+        self.assertEqual(settings.change_folders({"reset": True}), [T("Documents")])    # twice is fine
 
     def test_whole_list(self):
-        self.assertEqual(settings.change_folders(["~/work", "~/other", "~/work/"]), ["~/work", "~/other"])
+        self.assertEqual(settings.change_folders(["~/work", "~/other", "~/work/"]), [T("work"), T("other")])
         with self.assertRaises(ValueError):
-            settings.change_folders(["~/work", "~/nope"])
+            settings.change_folders([T("work"), T("nope")])
 
     def test_projects_file_is_what_the_daily_check_reads(self):
         settings.change_folders({"add": "~/work"})
         with open(config.PROJECTS, encoding="utf-8") as f:
             rows = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-        self.assertEqual(rows, ["~/Documents", "~/work"])
+        self.assertEqual(rows, [T("Documents"), T("work")])
 
 
 class Tasks(unittest.TestCase):

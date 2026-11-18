@@ -133,7 +133,7 @@ def load_folders():
             rows = [line.split("#", 1)[0].strip() for line in f]
         return [r for r in rows if r], True
     except OSError:
-        return [d for d in DEFAULT_FOLDERS if os.path.isdir(folder_path(d))], False
+        return [tidy_folder(d) for d in DEFAULT_FOLDERS if os.path.isdir(folder_path(d))], False
 
 
 def folder_info(folders):
