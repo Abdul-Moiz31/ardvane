@@ -3,6 +3,12 @@
 Don't panic, and don't skip steps. The order matters: if you clean before cutting off access, the attacker puts
 the malware straight back.
 
+> **One exception to the order below.** If the scan found **`gh-token-monitor`** or **`kitty-monitor`** (a LaunchAgent,
+> a systemd service or a script in `~/.local/bin`), **remove it before you revoke any token**. These wipers, left by the
+> Shai-Hulud worms, erase your home folder as soon as the GitHub token they stole stops working. Quarantine them with
+> Ardvane's **Fix** button (it stops them first, then moves them; nothing is deleted), run a new scan to confirm they're
+> gone, back up your files, and only then continue with step 2.
+
 ## 0. In the first 5 minutes
 
 - [ ] **Don't open** the affected project in VS Code / Cursor / any editor. **Don't run** `npm install`, `npm run …`, or any script in it.

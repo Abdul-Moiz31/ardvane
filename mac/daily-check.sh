@@ -37,8 +37,15 @@ for p in "$HOME/Library/Application Support/VSCodeUpdater" "$HOME/.node_modules"
          "$HOME/Library/Application Support/MicrosoftSystem64" "$HOME/.local/share/MicrosoftSystem64" "$HOME/.pcl-data" "$HOME/.pcl-state" \
          "$HOME/Library/LaunchAgents/com.launchkeeper.MicrosoftSystem64.plist" "$HOME/Library/LaunchAgents/com.bablu.helper.plist" \
          "$HOME/Library/LaunchAgents/com.avatar.update.wake.plist" /tmp/0001.dat /tmp/tmp7A863DD1.tmp; do
-  [ -e "$p" ] && bad "found: ${p/#$HOME/~}"
+  [ -e "$p" ] && [ ! -f "$DEST/hostcheck.py" ] && bad "found: ${p/#$HOME/~}"     # hostcheck reads the full list
 done
+# machine checks shared with the full scan: the malware list, worm persistence (wiper daemons, rogue runners, shell
+# sabotage, git templates), AI-agent configs in your home folder and editor extensions
+if [ -n "$PY" ] && [ -f "$DEST/hostcheck.py" ]; then
+  while IFS=$'\t' read -r lvl text path group; do
+    case "$lvl" in D) bad "$text" ;; W) chk "$text" ;; esac
+  done < <("$PY" "$DEST/hostcheck.py" 2>/dev/null)
+fi
 [ $danger -eq 0 ] && out "  ✅ none"
 
 # ---------------------------------------------------------------- 2. processes
@@ -46,7 +53,7 @@ out "2. Suspicious processes"
 n=$danger
 # match against the process list only (never against this script's own command line)
 plist="$(ps -axo pid=,comm=,args= | grep -v -e "daily-check" -e "grep")"
-procs="$(printf '%s\n' "$plist" | grep -E "MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|VSCodeUpdater|/\.node_modules/|node [^ ]*\.(eot|woff2?|ttf|otf|llf)( |$)")"
+procs="$(printf '%s\n' "$plist" | grep -E "MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|VSCodeUpdater|/\.node_modules/|node [^ ]*\.(eot|woff2?|ttf|otf|llf)( |$)|gh-token-monitor|kitty-monitor|bun_environment\.js|tanstack_runner\.js|router_runtime\.js")"
 [ -n "$procs" ] && while IFS= read -r l; do bad "process: ${l:0:160}"; done <<< "$procs"
 # `node -e` is also used by legitimate tools: only serious when it fetches or decodes code
 inline="$(printf '%s\n' "$plist" | grep -E "node -e " | grep -E "https?://|eval|base64|Buffer\.from|atob")"
@@ -56,8 +63,23 @@ inline="$(printf '%s\n' "$plist" | grep -E "node -e " | grep -E "https?://|eval|
 # ---------------------------------------------------------------- 3. persistence changed in last 24h
 out "3. Startup items / shell files changed in the last 24 hours"
 n=$warn
+# signer PLIST: the identified developer whose signed program a startup item starts ("" for anything else: unsigned or
+# ad-hoc programs, scripts and the interpreters that run them, files in temporary or hidden places)
+signer() {
+  local prog auth
+  prog="$(plutil -extract ProgramArguments.0 raw -o - "$1" 2>/dev/null || plutil -extract Program raw -o - "$1" 2>/dev/null)"
+  [ -f "$prog" ] || return 0
+  case "$prog" in /tmp/*|/private/tmp/*|/private/var/folders/*|/Users/Shared/*|*/.*) return 0 ;; esac
+  case "$(basename "$prog")" in sh|bash|zsh|dash|fish|env|osascript|open|node|bun|deno|perl*|ruby*|python*|java|php) return 0 ;; esac
+  codesign -v --strict "$prog" >/dev/null 2>&1 || return 0
+  auth="$(codesign -dv --verbose=2 "$prog" 2>&1 | sed -n 's/^Authority=Developer ID Application: //p' | head -1)"
+  printf '%s' "$auth"
+}
 while IFS= read -r f; do
-  [ -n "$f" ] && [ "$(basename "$f")" != "com.polinrider-survival-kit.daily-check.plist" ] && chk "new/changed startup item: $f"
+  [ -n "$f" ] && [ "$(basename "$f")" != "com.polinrider-survival-kit.daily-check.plist" ] || continue
+  who="$(signer "$f")"
+  if [ -n "$who" ]; then out "  updated startup item, signed by $who: ${f/#$HOME/~}"
+  else chk "new/changed startup item: ${f/#$HOME/~}"; fi
 done < <(find "$HOME/Library/LaunchAgents" /Library/LaunchAgents /Library/LaunchDaemons -type f -mtime -1 2>/dev/null)
 for f in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile"; do
   [ -f "$f" ] && [ -n "$(find "$f" -mtime -1 2>/dev/null)" ] && chk "${f/#$HOME/~} changed — check it contains nothing you didn't add"
@@ -92,7 +114,7 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
   for d in ${cand[@]+"${cand[@]}"}; do
     if [ ! -d "$d" ]; then [ -f "$DEST/projects.txt" ] && chk "project folder not found, skipped: ${d/#$HOME/~} — remove it in Ardvane › Settings › What gets scanned if it's gone for good"; continue; fi
     if ls "$d" >/dev/null 2>&1; then roots+=("$d")
-    else chk "can't read ${d/#$HOME/~} — give /bin/bash Full Disk Access (System Settings › Privacy & Security) so the daily check can scan it"; fi
+    else chk "can't read ${d/#$HOME/~} — macOS keeps background checks out of Documents, Desktop and Downloads. Open Ardvane and press \"Scan them now\" on the Overview, or keep your projects in a folder like ~/code"; fi
   done
   # scan_dir DIR: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
   scan_dir() {
@@ -160,7 +182,18 @@ fi
 command -v npm >/dev/null && [ "$(npm config get ignore-scripts 2>/dev/null)" != "true" ] && chk "npm ignore-scripts is off"
 s="$HOME/Library/Application Support/Code/User/settings.json"
 [ -f "$s" ] && ! grep -q '"task.allowAutomaticTasks": *"off"' "$s" && chk "VS Code automatic tasks are not off"
-for e in $(find "$HOME/.vscode/extensions" "$HOME/.cursor/extensions" -maxdepth 1 -mindepth 1 -type d -mtime -1 2>/dev/null); do chk "editor extension installed/updated in last 24h: $(basename "$e") — make sure you trust its publisher"; done
+# editor extensions: a NEW extension is worth a look, an update of one you already had is not (they update weekly)
+seen="$DEST/extensions-seen.txt"; now_ids="$(mktemp)"
+for d in "$HOME/.vscode/extensions" "$HOME/.cursor/extensions" "$HOME/.windsurf/extensions"; do
+  [ -d "$d" ] && find "$d" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sed -E 's#.*/##; s/-[0-9]+\.[0-9]+\.[0-9]+.*$//' | tr 'A-Z' 'a-z'
+done | sort -u > "$now_ids"
+if [ -f "$seen" ]; then
+  while IFS= read -r id; do [ -n "$id" ] && chk "new editor extension installed: $id — make sure you trust its publisher"; done < <(comm -13 "$seen" "$now_ids")
+  ups="$(find "$HOME/.vscode/extensions" "$HOME/.cursor/extensions" "$HOME/.windsurf/extensions" -maxdepth 1 -mindepth 1 -type d -mtime -1 2>/dev/null \
+         | sed -E 's#.*/##; s/-[0-9]+\.[0-9]+\.[0-9]+.*$//' | tr 'A-Z' 'a-z' | sort -u | comm -12 "$seen" - | tr '\n' ' ')"
+  [ -n "$ups" ] && out "  editor extensions updated: $ups"
+fi
+mv "$now_ids" "$seen"      # what is installed now: an extension removed and installed again counts as new
 csrutil status 2>/dev/null | grep -q enabled || chk "System Integrity Protection is not enabled"
 spctl --status 2>/dev/null | grep -q enabled || chk "Gatekeeper is not enabled"
 [ $danger -eq $n ] && [ $warn -eq $nw ] && out "  ✅ intact"

@@ -4,12 +4,15 @@ Rules
   * Every DANGER and every un-hidden WARNING becomes a task with steps (tasks_catalog.FINDING_RULES).
   * The first DANGER also opens the recovery checklist (tasks_catalog.INCIDENT), in the guide's order.
   * Marked a finding as fixed, but a later scan or daily check still finds it? The task reopens and says so.
+  * A warning about a state (a folder it can't read, a setting) closes itself once a newer daily check no longer finds
+    it. Warnings about an event ("changed in the last 24 hours") and every DANGER stay until you mark them done.
   * Setup tasks complete themselves when the protection they ask for is on, and reopen if it's switched off.
   * Routine checks come back every N days.
 
 Only progress is stored (~/.checkrepo/tasks.json); titles and steps always come from the catalog.
 """
 import json
+import re
 import threading
 import time
 
@@ -38,9 +41,23 @@ def _when(ts):
     return time.strftime("%d %b %Y", time.localtime(ts))
 
 
-def finding(level, text, path="", seen=0.0):
+# Warnings about something that happened in a time window: they vanish from the next report because time passed, not
+# because anyone looked at them, so they never close themselves.
+EVENT_RE = re.compile(r"in (?:the )?last 24 ?h|new/changed startup item|changed — check|new editor extension|"
+                      r"installed/updated|pushed within one hour", re.I)
+
+
+def finding(level, text, path="", seen=0.0, source=""):
     """A finding as the to-do list sees it. The key matches the scan's own key, so hiding a warning works everywhere."""
-    return {"key": short_hash(text), "level": level, "text": text, "path": path, "seen": seen}
+    return {"key": short_hash(text), "level": level, "text": text, "path": path, "seen": seen, "source": source}
+
+
+def latest_checks():
+    """{"daily": time, "scan": time} of the newest report of each kind (0 when there is none)."""
+    out = {"daily": 0.0, "scan": 0.0}
+    for r in reports.list_all():
+        out[r["kind"]] = max(out.get(r["kind"], 0.0), r["time"])
+    return out
 
 
 def findings_from_reports():
@@ -50,12 +67,27 @@ def findings_from_reports():
         latest = next((r for r in reports.list_all() if r["kind"] == kind), None)
         text = reports.read(latest["id"]) if latest else None
         for level, line in reports.findings(text or ""):
-            out.append(finding(level, line, seen=latest["time"]))
+            out.append(finding(level, line, seen=latest["time"], source=kind))
     return out
 
 
-def sync(found, protection, dismissed, now=None):
-    """Bring the list up to date with the latest findings and protection status. Safe to call often."""
+def _gone(t, checked):
+    """A state warning the newest daily check no longer reports. Only the daily check counts: it always covers the
+    same things, while a quick scan skips projects. Older tasks don't know their source: then the newest daily check
+    and the newest scan must both be newer."""
+    if t.get("level") != "warn" or EVENT_RE.search(t.get("text", "")):
+        return False
+    seen, source = t.get("seen", 0), t.get("source", "")
+    if source == "daily":
+        return checked.get("daily", 0) > seen
+    if source == "":
+        return checked.get("daily", 0) > seen and checked.get("scan", 0) > seen
+    return False
+
+
+def sync(found, protection, dismissed, now=None, checked=None):
+    """Bring the list up to date with the latest findings and protection status. Safe to call often.
+    checked: {"daily": time, "scan": time} of the newest reports, so warnings they no longer contain can close."""
     now = now or time.time()
     with _lock:
         data = _load()
@@ -72,17 +104,28 @@ def sync(found, protection, dismissed, now=None):
                 if hidden:
                     continue
                 tasks[tid] = {"kind": "finding", "level": f["level"], "text": f["text"], "path": f["path"], "created": now,
-                              "seen": f["seen"], "steps_done": [], "done_at": None}
+                              "seen": f["seen"], "source": f.get("source", ""), "steps_done": [], "done_at": None}
                 changed = True
                 continue
+            if f.get("source") and f.get("source") != t.get("source") and not t.get("source"):
+                t["source"] = f["source"]
+                changed = True
             if f["seen"] > t.get("seen", 0):
                 t["seen"] = f["seen"]
                 changed = True
+                if t.get("done_at") and t.get("resolution") == "gone":      # it came back
+                    t.update(done_at=None, resolution=None, reopened=f"The check on {_when(f['seen'])} found this again.")
                 if t.get("done_at") and t.get("resolution") == "fixed" and f["seen"] > t["done_at"]:
                     t.update(done_at=None, resolution=None, steps_done=[],
                              reopened=f"You marked this done on {_when(t['done_at'])}, but the check on {_when(f['seen'])} still found it.")
             if hidden and not t.get("done_at"):
                 t.update(done_at=now, resolution="mine")
+                changed = True
+
+        current = {"f-" + f["key"] for f in found}
+        for tid, t in tasks.items():
+            if t.get("kind") == "finding" and not t.get("done_at") and tid not in current and _gone(t, checked or {}):
+                t.update(done_at=now, resolution="gone", reopened="")
                 changed = True
 
         dangers = [f["seen"] for f in found if f["level"] == "danger"]

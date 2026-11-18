@@ -3,6 +3,25 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.5.0
+
+**Ardvane now finds the 2025–2026 worms on the computer itself, and removes their wipers safely.**
+
+- **Worm persistence:** the `gh-token-monitor` and `kitty-monitor` wipers, a GitHub Actions runner registered by
+  Sha1-Hulud, SANDWORM_MODE's MCP folder and git template, the OtterCookie lock file, shell start-up lines that shut the
+  computer down, and the worms' running processes. Every known malware location now comes from one list, which is also
+  what the fixer quarantines.
+- **The wipers erase your home folder when you revoke the token they stole.** Ardvane's to-do, recovery checklist and
+  guide now tell you to quarantine them first; the fixer stops them before moving them.
+- **AI coding assistants and editors on this computer:** hooks and MCP servers in your Claude Code, Claude Desktop,
+  Cursor, Windsurf, Gemini and VS Code configs that run malware loaders, steal keys, or run from a hidden folder or
+  straight from GitHub; known-malicious editor extensions and GlassWorm code hidden inside extensions.
+- **A quieter daily check.** An updated startup item signed by an identified developer (Malwarebytes, say) is noted
+  instead of becoming a to-do, an extension update no longer counts as a new extension, and warnings about a state that
+  is fixed now close themselves.
+- **Folders macOS keeps background jobs out of** (Documents, Desktop, Downloads) are named on the Overview with a
+  **Scan them now** button, instead of the advice to give `/bin/bash` Full Disk Access.
+
 ## 0.4.0
 
 **Ardvane now catches the self-spreading npm worms of 2025–2026 and reads many more places code can hide.**

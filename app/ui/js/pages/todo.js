@@ -66,7 +66,7 @@ function taskCard(t) {
   const isDone = t.status !== 'open';
   const allTicked = t.steps.every(s => s.done);
   const ic = t.level === 'danger' ? 'xCircle' : t.level === 'warn' ? 'warn' : t.group === 'routine' ? 'clock' : 'checkCircle';
-  const meta = t.status === 'done' ? (t.resolution === 'auto' ? 'Done automatically' : t.resolution === 'mine' ? `Marked as yours ${fmtTime(t.done_at)}` : `Done ${fmtTime(t.done_at)}`)
+  const meta = t.status === 'done' ? (t.resolution === 'auto' ? 'Done automatically' : t.resolution === 'mine' ? `Marked as yours ${fmtTime(t.done_at)}` : t.resolution === 'gone' ? `No longer found ${fmtTime(t.done_at)}` : `Done ${fmtTime(t.done_at)}`)
     : t.status === 'scheduled' ? `Next due ${fmtTime(t.due_at)}` : t.group === 'routine' ? `Every ${t.every_days} days` : t.created ? `Added ${fmtTime(t.created)}` : '';
 
   const steps = h('ol', { class: 'task-steps' }, t.steps.map((s, i) => {

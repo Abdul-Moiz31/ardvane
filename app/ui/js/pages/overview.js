@@ -1,7 +1,7 @@
 // @ts-check
 // Overview = the security dashboard: one status, four numbers, what needs attention, and the trend. Details live on
 // their own pages (To-do, Scan, Protection, Reports).
-import { h, button, pill, card, pageHead, empty, skeleton } from '../dom.js';
+import { h, button, pill, card, banner, pageHead, empty, skeleton } from '../dom.js';
 import { icon } from '../icons.js';
 import { modal, closeModal } from '../feedback.js';
 import { fmtTime, nextRun, plural } from '../format.js';
@@ -20,6 +20,7 @@ export function renderOverview() {
   return [
     pageHead('Overview', 'Your computer\'s security at a glance.'),
     statusBar(),
+    blockedFolders(),
     kpis(),
     h('div', { class: 'overview-grid' }, attention(),
       card('Last 30 days', 'chart', h('div', { class: 'card-pad' }, S.reports ? history(S.reports) : h('div', { class: 'skeleton chart-skeleton' })),
@@ -28,6 +29,16 @@ export function renderOverview() {
       card('Protection', 'shield', h('div', { class: 'list' }, protectionRows(true)), h('a', { href: '#protection', text: 'Manage' })),
       card('Recent activity', 'file', recentReports(4), h('a', { href: '#reports', text: 'All reports' }))),
   ];
+}
+
+/** Folders the daily check couldn't open: macOS keeps background jobs out of Documents, Desktop and Downloads. */
+function blockedFolders() {
+  const list = /** @type {string[]} */ (S.data.blocked_folders || []);
+  if (!list.length || (S.scan && S.scan.running)) return null;
+  return banner('warn', 'lock', `The daily check couldn't read ${list.join(', ')}`,
+    'macOS doesn\'t let background jobs open Documents, Desktop or Downloads, so the projects there weren\'t checked. ' +
+    'Ardvane can scan them from here. To have the daily check cover them on its own, keep your projects in a folder like ~/code.',
+    button('Scan them now', () => startScan('full', list), 'btn-primary', 'radar'));
 }
 
 // ------------------------------------------------------------------------------------------------ status

@@ -55,6 +55,26 @@ def list_all(limit=400):
     return rows[:limit]
 
 
+BLOCKED_RE = re.compile(r"can't read (.+?) — ")
+
+
+def blocked_folders():
+    """Folders the newest daily check couldn't open (macOS keeps background jobs out of Documents, Desktop and
+    Downloads), unless a scan made after it has covered them. The dashboard runs with your permissions and can."""
+    rows = list_all()
+    daily = next((r for r in rows if r["kind"] == "daily"), None)
+    scan = next((r for r in rows if r["kind"] == "scan"), None)
+    if not daily or (scan and scan["time"] > daily["time"]):
+        return []
+    text = read(daily["id"]) or ""
+    out = []
+    for m in BLOCKED_RE.finditer(text):
+        folder = m.group(1).strip()
+        if folder not in out and os.path.isdir(os.path.expanduser(folder)):
+            out.append(folder)
+    return out
+
+
 def latest_daily():
     rows = [r for r in list_all() if r["kind"] == "daily"]
     return rows[0] if rows else None
