@@ -3,6 +3,15 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.3.3
+
+- **Allow-listing a file now also clears the "disguised payload" alarm.** A script that a package.json script, task
+  or agent hook runs from a `fonts/` folder was flagged as DANGER even after you added its SHA-256 to
+  `~/.config/checkrepo/allowlist`, and its package.json was flagged as "script-chain" with it. That blocked clean
+  pushes of projects such as docx-editor, whose `packages/fonts/` scripts are ordinary Node scripts. The allowlist
+  now applies to this rule like every other. It still covers only that exact file: change one byte and it is flagged
+  again, and a fake font run as code is still caught.
+
 ## 0.3.2
 
 - **The app icon starts Ardvane natively on Apple Silicon Macs.** An app whose program is a script has no chip type,

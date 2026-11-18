@@ -905,7 +905,7 @@ class Scan:
         for _, _, target in resolved:
             if target not in self.flagged and disguised(target):
                 blob = read_sample(os.path.join(self.root, target))
-                if blob and looks_like_code(blob.data):
+                if blob and blob.sha not in self.allow and looks_like_code(blob.data):
                     self.add("DANGER", "disguised-payload", target,
                              f"is run as code but disguised as {os.path.splitext(target)[1] or 'a data file'}")
         for src, label, target in resolved:

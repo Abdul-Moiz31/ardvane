@@ -9,6 +9,7 @@ in this repository), runs the scanner on each, and checks the verdict.
 Marker strings are assembled at runtime so this file itself never contains them literally.
 Usage: python3 run_tests.py [--quiet]          (uses $CHECKREPO or ../checkrepo.py)
 """
+import hashlib
 import json
 import os
 import random
@@ -247,6 +248,35 @@ def special_cases(tmp):
     finally:
         cr.Scan.walk = original
     yield "robust/scanner-bug-exits-4", code == cr.EXIT_ERROR, f"exit {code}"
+
+    # the allowlist covers files that package.json scripts run from a fonts/ folder - that exact file only
+    def findings(name, files, allow):
+        d = os.path.join(tmp, name.replace("/", "__"))
+        write_case(d, files)
+        s = cr.Scan(d)
+        s.allow = set(allow)          # never the allowlist of the computer running the tests
+        s.walk()
+        got = sorted((f[0], f[1], f[2]) for f in s.findings)
+        return got, ",".join(f"{rule}:{rel}" for _, rule, rel in got) or "clean"
+
+    mjs = "import fs from 'node:fs';\nconst out = fs.readdirSync('dist');\nfunction check() { if (!out.length) process.exit(1); }\ncheck();\n"
+    mjs_sha = hashlib.sha256(mjs.encode()).hexdigest()
+    pkg = {"packages/fonts/package.json": json.dumps({"name": "fonts", "scripts": {"build": "node scripts/check-built-assets.mjs"}})}
+    run_mjs = [("DANGER", "disguised-payload", "packages/fonts/scripts/check-built-assets.mjs"),
+               ("DANGER", "script-chain", "packages/fonts/package.json")]
+    got, shown = findings("pass/allowlisted-script-in-fonts", dict(pkg, **{"packages/fonts/scripts/check-built-assets.mjs": mjs}), [mjs_sha])
+    yield "pass/allowlisted-script-in-fonts", got == [], shown
+    got, shown = findings("catch/allowlisted-script-one-byte-changed",
+                          dict(pkg, **{"packages/fonts/scripts/check-built-assets.mjs": mjs.replace("dist", "dust")}), [mjs_sha])
+    yield "catch/allowlisted-script-one-byte-changed", got == run_mjs, shown
+    got, shown = findings("catch/script-in-fonts-not-allowlisted", dict(pkg, **{"packages/fonts/scripts/check-built-assets.mjs": mjs}), [])
+    yield "catch/script-in-fonts-not-allowlisted", got == run_mjs, shown
+    fake = {"package.json": json.dumps({"name": "x", "scripts": {"dev": "node public/fonts/fa-solid-900.woff2"}}),
+            "public/fonts/fa-solid-900.woff2": OBF + "\n"}
+    run_fake = [("DANGER", "fake-font", "public/fonts/fa-solid-900.woff2"), ("DANGER", "script-chain", "package.json")]
+    for label, allow in (("empty-allowlist", []), ("other-allowlist-entries", [mjs_sha, "0" * 64])):
+        got, shown = findings("catch/run-fake-font-" + label, fake, allow)
+        yield "catch/run-fake-font-" + label, got == run_fake, shown
 
 
 def main():
