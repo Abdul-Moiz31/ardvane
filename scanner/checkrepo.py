@@ -118,6 +118,8 @@ MALICIOUS_NPM = {
     "tailwindcss-form-ui", "tailwindcss-form-utils", "tailwindcss-forms-style", "tailwindcss-forms-styles", "tailwindcss-forms-ui", "tailwindcss-merge",
     "tailwindcss-motion-advanced", "tailwindcss-scrollbar-hide", "tailwindcss-style-animate", "tailwindcss-style-modify", "tailwindcss-typography-style", "terminal-logger-utils",
     "ts-logger-pack", "uibabai",
+    # 2026: axios RAT dropper, SANDWORM_MODE typosquats, Contagious Interview cross-registry wave, malicious MCP server
+    "plain-crypto-js", "claud-code", "cloude-code", "suport-color", "rimarf", "yarsg", "logkitx", "pino-debugger", "debug-fmt", "tailwind-magic", "node-tailwind-magic", "postmark-mcp",
 }
 
 # Package names in a lockfile: "node_modules/<name>", "<name>":, <name>@<ver>, npm aliases "npm:<name>@", pnpm v6 keys
@@ -128,13 +130,38 @@ PKG_TOKEN_RE = re.compile(r'(?:node_modules/|npm:|(?m:^)[ \t]*/|(?<![\w@/.~-]))(
 # Malicious PyPI packages (PEP 503 names: lower case, - for any run of - _ .). Kept equal to lists/pypi.txt by the
 # self-test; the detection feed adds more.
 MALICIOUS_PYPI = {
-    "pybitjs", "pyservercheck",
+    "pybitjs", "pyservercheck", "logutilkit", "apachelicense", "fluxhttp",
 }
 
 
 def npm_names_in(text):
     """Known-malicious npm packages named in a lockfile or manifest."""
     return {m.group(1) for m in PKG_TOKEN_RE.finditer(text)} & MALICIOUS_NPM
+
+
+def hijacked_in(text, table=None, python=False):
+    """name@version for every hijacked release a lockfile installs (npm: package-lock, yarn, pnpm, bun; PyPI:
+    requirements pins, poetry.lock / uv.lock / pdm.lock, Pipfile.lock)."""
+    hits = set()
+    for name, versions in (table if table is not None else (HIJACKED_PYPI if python else HIJACKED_VERSIONS)).items():
+        if name not in text:
+            continue
+        n = re.escape(name)
+        for v in versions:
+            if v not in text:
+                continue
+            ve = re.escape(v)
+            if python:
+                pats = (rf"(?im)^\s*{n}\s*===?\s*{ve}\b", rf'(?m)^name = "{n}"\s*\nversion = "{ve}"',
+                        rf'"{n}"\s*:\s*\{{[^{{}}]*?"version"\s*:\s*"==\s*{ve}"')
+            else:
+                pats = (rf"(?<![\w@/.-]){n}@(?:npm:)?{ve}(?![\w.-])",                       # pnpm, bun, yarn berry
+                        rf'node_modules/{n}"\s*:\s*\{{[^{{}}]*?"version"\s*:\s*"{ve}"',      # package-lock
+                        rf'(?m)^"?{n}@[^\n]*:\n\s+version:? "?{ve}"?\s*$',                   # yarn v1
+                        rf"(?m)^\s*/{n}/{ve}:")                                             # pnpm v5
+            if any(re.search(p, text) for p in pats):
+                hits.add(f"{name}@{v}")
+    return hits
 
 
 def _load_feed():
@@ -164,7 +191,8 @@ SKIP_DIRS = {".git", "node_modules", "bower_components", ".venv", "venv", "__pyc
 CODE_EXT = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx")
 FONT_EXT = (".woff", ".woff2", ".ttf", ".otf", ".eot", ".llf", ".fnt")
 # Folders whose files editors and AI agents run or obey just because the project was opened
-EDITOR_DIRS = {".vscode", ".claude", ".cursor", ".gemini", ".windsurf"}
+EDITOR_DIRS = {".vscode", ".claude", ".cursor", ".gemini", ".windsurf", ".devcontainer", ".clinerules", ".kiro",
+               ".amazonq", ".roo", ".continue", ".husky", ".githooks"}
 # Build-tool config files: they run on every `npm run dev`, which is why the worm appends its code to them
 CONFIG_NAME_RE = re.compile(r"(?:^|[._-])config\.[cm]?[jt]s$|^\.?[\w-]+rc\.[cm]?js$")
 MB = 1024 * 1024
@@ -179,6 +207,7 @@ EXIT_CLEAN, EXIT_DANGER, EXIT_WARNING, EXIT_USAGE, EXIT_ERROR = range(5)
 # never committed (e.g. Claude Code ignores .claude/settings.local.json itself), and malware likes to hide there.
 SENSITIVE_PATHSPECS = tuple(":(glob,icase)" + p for p in (
     "**/.vscode/**", "**/.claude/**", "**/.cursor/**", "**/.gemini/**", "**/.windsurf/**", "**/.mcp.json",
+    "**/.devcontainer/**", "**/.devcontainer.json", "**/.husky/**", "**/.githooks/**", "**/*.pth",
     "**/*config.*", "**/*rc.js", "**/fonts/**", "**/package.json")) + (":(exclude,glob)**/node_modules/**",)
 
 # Payload appended after a long run of whitespace: real samples use 149–776 spaces then 25–40 KB of code. The run may
@@ -251,6 +280,99 @@ PROMPT_INJECTION_RE = re.compile(
 BASE_URL_RE = re.compile(r'"(?:ANTHROPIC_BASE_URL|ANTHROPIC_API_URL|OPENAI_BASE_URL|OPENAI_API_BASE|[A-Z_]*_BASE_URL)"\s*:\s*"https?://', re.I)
 # Prefixes that commands use for "the project folder"
 PROJECT_DIR_RE = re.compile(r"^(?:\$\{?(?:CLAUDE_PROJECT_DIR|workspaceFolder|PWD)\}?|\$\{workspaceRoot\})[/\\]")
+# Folders of agent rules, commands and skills that agents read as instructions (Cursor, Windsurf, Cline, Copilot,
+# Claude Code, Kiro, Amazon Q, Roo, Continue). Only their text files count: scripts in them are checked as code.
+INSTRUCTION_DIRS = ((".cursor", "rules"), (".windsurf", "rules"), (".clinerules",), (".github", "instructions"),
+                    (".github", "prompts"), (".claude", "commands"), (".claude", "agents"), (".claude", "skills"),
+                    (".kiro", "steering"), (".amazonq", "rules"), (".roo",), (".continue", "rules"))
+INSTRUCTION_EXT = (".md", ".mdc", ".txt", "")
+# Settings that let an AI agent act without asking: approve every MCP server a repository ships, or every tool call
+AGENT_AUTO_APPROVE = ("enableAllProjectMcpServers",)
+CHAT_AUTO_APPROVE = ("chat.tools.autoApprove", "chat.tools.global.autoApprove")
+# Environment variables that make every program load extra code
+PRELOAD_ENV = ("NODE_OPTIONS", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "PYTHONSTARTUP", "PERL5OPT")
+# npm scripts that run on their own: on install, on `npm run <x>` (pre/post hooks) or when a git dependency is packed
+AUTO_SCRIPTS = LIFECYCLE + ("preprepare", "postprepare", "prepack", "postpack", "dependencies",
+                            "predev", "prestart", "prebuild", "pretest", "postdev", "poststart")
+# Python's site module runs any line of a .pth file that starts with `import` - in every Python start-up
+PTH_IMPORT_RE = re.compile(r"^import[ \t]", re.M)
+PTH_DANGER_RE = re.compile(r"\bexec\s*\(|\beval\s*\(|b64decode|\bbase64\b|urllib|urlopen|\brequests\.|\bsocket\b"
+                           r"|subprocess|os\.system|os\.popen|marshal|zlib\.decompress|codecs\.decode")
+# Git hooks a repository ships for its developers (husky, lefthook, plain .githooks): they run on every commit
+GIT_HOOK_DIRS = (".husky", ".githooks")
+GIT_HOOK_FILES = ("lefthook.yml", "lefthook.yaml", ".lefthook.yml", ".pre-commit-config.yaml")
+# Dev Containers: initializeCommand runs on YOUR computer before the container starts, the others inside it
+DEVCONTAINER_HOST_CMDS = ("initializeCommand",)
+DEVCONTAINER_CMDS = ("onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand", "postAttachCommand")
+# Python package manifests and lockfiles (requirements-dev.txt, requirements/base.in ...)
+PY_MANIFESTS = ("pyproject.toml", "pipfile", "pipfile.lock", "poetry.lock", "uv.lock", "pdm.lock", "setup.py", "setup.cfg")
+PY_REQ_RE = re.compile(r"^(?:requirements|constraints)[\w.-]*\.(?:txt|in)$")
+PY_TOKEN_RE = re.compile(r"(?<![\w.-])[A-Za-z0-9][\w.-]*(?![\w.-])")
+
+
+def pep503(name):
+    """PyPI's own name rule: case and runs of - _ . don't matter (Foo.Bar == foo-bar)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+# ---------------------------------------------------------------- self-spreading npm worms (Shai-Hulud and successors)
+# File names only these worms use: their payloads, the secrets they collect, their workflows and their wiper daemons
+WORM_NAME_RE = re.compile(r"(?:^|/)(?:bun_environment\.js|tanstack_runner\.js|litellm_init\.pth|truffleSecrets\.json"
+                          r"|actionsSecrets\.json|gh-token-monitor\.(?:sh|service)|com\.user\.(?:gh-token|kitty)-monitor\.plist"
+                          r"|shai-hulud(?:-workflow)?\.ya?ml)$", re.I)
+# Their loaders, as named in the install scripts they add to package.json
+WORM_LOADER_RE = re.compile(r"\b(?:setup_bun|bun_environment|router_init|tanstack_runner)\.js\b", re.I)
+WORM_HASHES = {
+    "46faab8ab153fae6e80e7cca38eab363075bb524edd79e42269217a083628f09",  # Shai-Hulud bundle.js (Sep 2025)
+    "a3894003ad1d293ba96d77881ccd2071446dc3f65f434669b49b3da92421901a",  # Sha1-Hulud 2.0 setup_bun.js (Nov 2025)
+    "62ee164b9b306250c1172583f138c9614139264f889fa99614903c12755468d0",  # Sha1-Hulud 2.0 bun_environment.js
+    "cbb9bc5a8496243e02f3cc080efbe3e4a1430ba0671f2e43a202bf45b05479cd",  # Sha1-Hulud 2.0 bun_environment.js
+    "f099c5d9ec417d4445a0328ac0ada9cde79fc37410914103ae9c609cbc0ee068",  # Sha1-Hulud 2.0 bun_environment.js
+    "ab4fcadaec49c03278063dd269ea5eef82d24f2124a8e15d7b90f2fa8601266c",  # Mini Shai-Hulud router_init.js (May 2026)
+}
+KNOWN_HASHES |= WORM_HASHES
+# Exact versions of popular packages that were hijacked to ship malware (the name alone is fine)
+HIJACKED_VERSIONS = {
+    "axios": {"1.14.1", "0.30.4"},                                           # Mar 2026 (RAT via plain-crypto-js)
+    "debug": {"4.4.2"}, "chalk": {"5.6.1"}, "ansi-styles": {"6.2.2"}, "supports-color": {"10.2.1"},
+    "strip-ansi": {"7.1.1"}, "color-convert": {"3.1.1"}, "ansi-regex": {"6.2.1"}, "wrap-ansi": {"9.0.1"},  # Sep 2025 clipper
+    "color-name": {"2.0.1"}, "simple-swizzle": {"0.2.3"}, "slice-ansi": {"7.1.1"}, "error-ex": {"1.3.3"},
+    "is-arrayish": {"0.3.3"}, "color-string": {"2.1.1"}, "chalk-template": {"1.1.1"}, "backslash": {"0.2.1"},
+    "has-ansi": {"6.0.1"}, "supports-hyperlinks": {"4.1.1"},
+    "nx": {"20.9.0", "20.10.0", "20.11.0", "20.12.0", "21.5.0", "21.6.0", "21.7.0", "21.8.0"},             # s1ngularity, Aug 2025
+    "@nx/devkit": {"20.9.0", "21.5.0"}, "@nx/js": {"20.9.0", "21.5.0"}, "@nx/workspace": {"20.9.0", "21.5.0"},
+    "@nx/node": {"20.9.0", "21.5.0"}, "@nx/eslint": {"20.9.0", "21.5.0"}, "@nx/key": {"3.2.0"}, "@nx/enterprise-cloud": {"3.2.0"},
+}
+HIJACKED_PYPI = {"litellm": {"1.82.7", "1.82.8"}, "telnyx": {"4.87.1", "4.87.2"}}                        # TeamPCP, Mar 2026
+# A script that runs on its own and fetches a JavaScript runtime to run its payload with (the worms bring Bun)
+RUNTIME_DROP_RE = re.compile(r"bun\.sh/install|github\.com/oven-sh/bun/releases|oven-sh/bun/releases/download", re.I)
+SPAWN_RE = re.compile(r"child_process|\bspawn(?:Sync)?\s*\(|\bexecSync\s*\(|\bexec\s*\(|Bun\.spawn", re.I)
+# AI coding CLIs told to act without asking (s1ngularity turned them into secret hunters)
+AI_YOLO_RE = re.compile(r"--dangerously-skip-permissions|\bgemini\b[^\n]{0,80}--yolo\b|--trust-all-tools", re.I)
+# Payload hosting the Contagious Interview campaign uses: JSON storage sites read and run as code
+JSON_STORE_RE = re.compile(r"\b(?:jsonkeeper\.com|jsonsilo\.com|api\.npoint\.io|npoint\.io/docs)\b", re.I)
+RUN_TEXT_RE = re.compile(r"\beval\s*\(|new\s+Function\s*\(|\bFunction\s*\(\s*['\"]require|vm\.runIn(?:New|This)?Context")
+SVG_READ_RE = re.compile(r"readFile(?:Sync)?\s*\([^)]{0,200}\.svg|\.svg['\"`]\s*\)?[^;\n]{0,80}readFile", re.I)
+SVG_COMMENT_RE = re.compile(r"<!--|\\x3c!--|<\\!--")
+B64_DECODE_RE = re.compile(r"Buffer\.from\([^)]*['\"]base64['\"]|\batob\s*\(", re.I)
+# A file an install script or auto-run hook runs that is this big and this unreadable is a bundled payload
+BIG_PAYLOAD, BIG_LINE = 1 * MB, 50_000
+SECRET_HUNT_RE = re.compile(r"trufflehog|NPM_TOKEN|GITHUB_TOKEN|AWS_SECRET_ACCESS_KEY|ACTIONS_RUNTIME_TOKEN|gh auth token|\.npmrc", re.I)
+# Who ran a script: these labels run it without anyone typing a command
+AUTO_LABELS = {"command", "auto-run task", "git hook", "dev container", "NODE_OPTIONS"}
+
+
+def auto_label(label):
+    return label in AUTO_LABELS or label.strip('"') in AUTO_SCRIPTS
+
+# ---------------------------------------------------------------- GitHub Actions workflows
+WORKFLOW_SECRETS_RE = re.compile(r"toJSON\(\s*secrets\s*\)", re.I)
+WORKFLOW_NET_RE = re.compile(r"\b(?:curl|wget|Invoke-WebRequest|iwr|nc)\b|webhook\.site|upload-artifact|base64", re.I)
+WORKFLOW_MEMDUMP_RE = re.compile(r"memdump\.py|Runner\.Worker[^\n]*(?:/proc/|maps|mem\b)|/proc/[^\s]*/mem\b", re.I)
+# Text anyone can write (an issue, a PR title, a branch name) pasted into a shell command: command injection
+WORKFLOW_INJECT_RE = re.compile(r"\$\{\{\s*github\.(?:event\.(?:issue|pull_request|comment|discussion|review|review_comment|"
+                                r"head_commit|commits\[\d+\])\.(?:title|body|message|head\.ref|head\.label)|head_ref)\s*\}\}")
+WORKFLOW_PR_HEAD_RE = re.compile(r"github\.event\.pull_request\.head\.(?:sha|ref)|refs/pull/|github\.head_ref", re.I)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -472,14 +594,33 @@ def folder_open_tasks(text):
     tasks = j.get("tasks") if isinstance(j, dict) else None
     if not isinstance(tasks, list):
         return None
+    by_label = {t.get("label"): t for t in tasks if isinstance(t, dict) and isinstance(t.get("label"), str)}
+
+    def own_cmd(t):
+        return " ".join(filter(None, [command_line(t)] + [command_line(as_dict(t.get(os_)))
+                                                          for os_ in ("osx", "linux", "windows")]))
+
+    def with_deps(t):
+        """The task's command plus every task it dependsOn (they run first, just as automatically)."""
+        cmds, todo, seen = [], [t], set()
+        while todo:
+            cur = todo.pop()
+            if id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            cmds.append(own_cmd(cur))
+            deps = cur.get("dependsOn")
+            for d in [deps] if isinstance(deps, (str, dict)) else as_list(deps):
+                label = d if isinstance(d, str) else as_dict(d).get("task")
+                if isinstance(label, str) and label in by_label:
+                    todo.append(by_label[label])
+        return " && ".join(filter(None, cmds))
     res = []
     for t in tasks:
         if not isinstance(t, dict) or not is_folder_open(t):
             continue
-        cmd = " ".join(filter(None, [command_line(t)] + [command_line(as_dict(t.get(os_)))
-                                                          for os_ in ("osx", "linux", "windows")]))
         hidden = bool(t.get("hide")) or as_dict(t.get("presentation")).get("reveal") in ("never", "silent")
-        res.append((cmd, hidden))
+        res.append((with_deps(t), hidden))
     return res
 
 
@@ -536,13 +677,21 @@ class Kind:
         self.is_code = self.name.endswith(CODE_EXT)
         self.is_font = self.name.endswith(FONT_EXT) or (self.name.endswith(".svg") and "fonts" in dirs)
         self.is_agent_cfg = anchored.endswith(tuple("/" + p for p in AGENT_SETTINGS + MCP_FILES))
-        self.is_instr = self.name in INSTRUCTION_NAMES or (len(dirs) >= 2 and dirs[-2:] == [".cursor", "rules"])
+        in_instr_dir = any(tuple(dirs[i:i + len(d)]) == d for d in INSTRUCTION_DIRS for i in range(len(dirs)))
+        self.is_instr = self.name in INSTRUCTION_NAMES or self.name == ".clinerules" \
+            or (in_instr_dir and os.path.splitext(self.name)[1] in INSTRUCTION_EXT)
         self.is_lockfile = self.name in LOCKFILES
         self.is_config = bool(CONFIG_NAME_RE.search(self.name))
+        self.is_git_hook = (bool(dirs) and dirs[0] in GIT_HOOK_DIRS) or (not dirs and self.name in GIT_HOOK_FILES)
+        self.is_devcontainer = self.name == ".devcontainer.json" or (self.name == "devcontainer.json" and ".devcontainer" in dirs)
+        self.is_pth = self.name.endswith(".pth")
+        self.is_py_manifest = self.name in PY_MANIFESTS or bool(PY_REQ_RE.match(self.name))
+        self.is_workflow = dirs[-2:] == [".github", "workflows"] and self.name.endswith((".yml", ".yaml"))
         # files that run or configure code on their own: never skipped quietly
-        self.sensitive = self.in_editor_dir or self.is_agent_cfg or self.is_config or self.is_font \
-            or self.name in ("package.json", ".mcp.json")
-        self.interesting = (self.sensitive or self.is_code or self.is_instr or self.is_lockfile
+        self.sensitive = self.in_editor_dir or self.is_agent_cfg or self.is_config or self.is_font or self.is_git_hook \
+            or self.is_pth or self.name in ("package.json", ".mcp.json")
+        self.interesting = (self.sensitive or self.is_code or self.is_instr or self.is_lockfile or self.is_py_manifest
+                            or self.is_workflow
                             or self.name == ".gitignore" or self.name.endswith((".bat", ".json")))
 
 
@@ -672,6 +821,9 @@ class Scan:
         if IMPLANT_NAME_RE.search(rel):
             self.add("DANGER", "implant-file", rel, "file name of the campaign's implant / worm tooling")
             return
+        if WORM_NAME_RE.search(rel):
+            self.add("DANGER", "worm-file", rel, "file name used only by the Shai-Hulud npm worms (payload, stolen secrets, workflow or wiper)")
+            return
         if not k.interesting:
             return
         blob = read_sample(full, MAX_READ_LOCKFILE if k.is_lockfile else MAX_READ)
@@ -706,6 +858,12 @@ class Scan:
                 self.gitignore_configbat = True
             return
 
+        if k.is_pth:
+            self.pth(rel, text)
+            return
+        if k.is_git_hook and not k.is_code:
+            self.git_hook(rel, text)
+            return
         if k.is_agent_cfg:
             self.agent_config(rel, text)
             if not k.in_vscode:
@@ -716,8 +874,14 @@ class Scan:
         if k.is_lockfile:
             self.lockfile(rel, text)
             return
+        if k.is_py_manifest:
+            self.py_manifest(rel, text)
+            return
+        if k.is_workflow:
+            self.workflow(rel, text)
+            return
 
-        if k.in_vscode:
+        if k.in_vscode and not k.is_code:
             self.vscode(rel, k.name, text)
             return
 
@@ -729,6 +893,9 @@ class Scan:
         if k.name == "package.json":
             self.package(rel, text)
             return
+        if k.is_devcontainer:
+            self.devcontainer(rel, text)
+            return
 
         if k.is_code:
             self.code(rel, k, text)
@@ -738,6 +905,14 @@ class Scan:
         if inv:
             self.add("DANGER", "invisible-code", rel, f"{len(inv.group(0))} invisible Unicode characters hiding encoded code (GlassWorm technique)")
             return
+        if RUN_TEXT_RE.search(text):
+            store = JSON_STORE_RE.search(text)
+            if store:
+                self.add("DANGER", "remote-code", rel, f"downloads code from {store.group(0)} and runs it (Contagious Interview loader)")
+                return
+            if len(text) < 300_000 and SVG_READ_RE.search(text) and SVG_COMMENT_RE.search(text) and B64_DECODE_RE.search(text):
+                self.add("DANGER", "image-payload", rel, "decodes data hidden in an SVG image and runs it as code")
+                return
         parts = rel.split("/")
         if (len(parts) == 1 or os.path.exists(os.path.join(self.root, *parts[:-1], "package.json"))) \
                 and HEX_ARRAY_RE.search(text) and max(map(len, text.split("\n"))) > 2000:
@@ -788,6 +963,19 @@ class Scan:
                 reasons.append("pre-approves running any shell command")
             if j.get("apiKeyHelper"):
                 reasons.append("sets an apiKeyHelper command")
+            if any(j.get(k) is True for k in AGENT_AUTO_APPROVE) or as_list(j.get("enabledMcpjsonServers")):
+                reasons.append("approves the repository's own MCP servers without asking you")
+            env = as_dict(j.get("env"))
+            for k in PRELOAD_ENV:
+                v = env.get(k)
+                if not isinstance(v, str) or not v.strip():
+                    continue
+                if k == "NODE_OPTIONS":
+                    preload = node_scripts("node " + v)
+                    self.runs += [(rel, k, p) for p in preload]
+                    if not preload:
+                        continue          # memory limits and the like
+                reasons.append(f"sets {k}, which makes every program it starts load extra code")
         if BASE_URL_RE.search(text):
             reasons.append("redirects AI API traffic to another server (can leak your API key)")
         if reasons:
@@ -812,11 +1000,105 @@ class Scan:
         if reasons:
             self.add("WARNING", "ai-instructions", rel, "; ".join(reasons) + " - review before letting an AI agent work in this repo")
 
+    def pth(self, rel, text):
+        """A .pth file: Python runs its `import` lines every time it starts, so code there runs without being called."""
+        lines = [l for l in text.splitlines() if PTH_IMPORT_RE.match(l)]
+        if not lines:
+            return
+        body = "\n".join(lines)
+        if marker_hits(body) or PTH_DANGER_RE.search(body):
+            self.add("DANGER", "pth-autorun", rel, "runs hidden code every time Python starts: " + lines[0][:70])
+        else:
+            self.add("WARNING", "pth-autorun", rel, "runs code every time Python starts - check what it imports")
+
+    def git_hook(self, rel, text):
+        """Git hooks a repository ships (husky, lefthook, .githooks): they run on every commit once installed."""
+        hits = marker_hits(text)
+        if hits:
+            self.add("DANGER", "git-hook", rel, "git hook contains known malware indicators: " + hits[0])
+            return
+        self.runs += [(rel, "git hook", p) for p in node_scripts(text)]
+        code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+        if STEAL_SRC_RE.search(code) and STEAL_NET_RE.search(code):
+            self.add("DANGER", "git-hook", rel, "git hook reads your keys/credentials and sends them over the network")
+            return
+        reason = loader_reason(text, freeform=True)
+        if reason and reason.startswith("runs "):
+            self.add("DANGER", "git-hook", rel, "git hook runs a disguised file on every commit: " + reason)
+        elif reason:
+            self.add("WARNING", "git-hook", rel, "git hook downloads and runs code on every commit: " + reason)
+
+    def py_manifest(self, rel, text):
+        hits = sorted({pep503(m.group(0)) for m in PY_TOKEN_RE.finditer(text)} & MALICIOUS_PYPI)
+        if hits:
+            self.add("DANGER", "malicious-package", rel, "installs known malicious PyPI package: " + ", ".join(hits[:3]))
+            return
+        bad = sorted(hijacked_in(text, python=True))
+        if bad:
+            self.add("DANGER", "hijacked-version", rel, "installs a hijacked PyPI release that ships malware: " + ", ".join(bad[:3]))
+
+    def devcontainer(self, rel, text):
+        """Dev Container commands: initializeCommand runs on this computer, the rest inside the container."""
+        j = load_json(text, jsonc=True)
+        if not isinstance(j, dict):
+            return
+
+        def commands(v):
+            if isinstance(v, str):
+                return [v]
+            if isinstance(v, list):
+                return [" ".join(str(a) for a in v)]
+            return [c for x in as_dict(v).values() for c in commands(x)]
+        host = [c for k in DEVCONTAINER_HOST_CMDS for c in commands(j.get(k))]
+        inside = [c for k in DEVCONTAINER_CMDS for c in commands(j.get(k))]
+        for c in host + inside:
+            self.runs += [(rel, "dev container", p) for p in node_scripts(c)]
+        reason = next(filter(None, map(loader_reason, host)), None)
+        if reason:
+            self.add("DANGER", "devcontainer", rel, "runs on your computer when the dev container opens: " + reason)
+        elif any(STEAL_SRC_RE.search(c) and STEAL_NET_RE.search(c) for c in host):
+            self.add("DANGER", "devcontainer", rel, "initializeCommand reads your keys/credentials and sends them over the network")
+
+    def workflow(self, rel, text):
+        """GitHub Actions workflows: how the worms keep a foothold (a backdoor workflow on a self-hosted runner) and
+        steal CI secrets, and the patterns that let anyone run code in your CI."""
+        hits = marker_hits(text)
+        if hits:
+            self.add("DANGER", "workflow", rel, "workflow contains known malware indicators: " + hits[0])
+            return
+        run = "\n".join(re.findall(r"(?m)^\s*(?:-\s*)?run:\s*[|>]?[-+]?\s*(.*(?:\n(?!\s*(?:-\s)?[\w-]+:).*)*)", text))
+        triggers = re.search(r"(?m)^on:\s*(.*(?:\n[ \t-].*)*)", text)
+        on = triggers.group(1) if triggers else ""
+        if re.search(r"\bdiscussion\b", on) and re.search(r"runs-on:\s*\[?\s*self-hosted", text) and "github.event.discussion.body" in text:
+            self.add("DANGER", "workflow", rel, "backdoor: anyone who opens a discussion runs commands on a self-hosted runner (Sha1-Hulud 2.0)")
+            return
+        if WORKFLOW_MEMDUMP_RE.search(text):
+            self.add("DANGER", "workflow", rel, "reads the runner's memory to steal CI secrets (tj-actions / reviewdog compromise)")
+            return
+        if WORKFLOW_SECRETS_RE.search(text):
+            if WORKFLOW_NET_RE.search(text):
+                self.add("DANGER", "workflow", rel, "dumps every CI secret (toJSON(secrets)) and sends or uploads it")
+                return
+            self.add("WARNING", "workflow", rel, "writes every CI secret out at once (toJSON(secrets)) - check where it goes")
+        reasons = []
+        inject = WORKFLOW_INJECT_RE.search(run)
+        if inject:
+            reasons.append(f"puts text anyone can write ({inject.group(0)}) into a shell command - command injection")
+        if re.search(r"\bpull_request_target\b|\bworkflow_run\b", on) and WORKFLOW_PR_HEAD_RE.search(text):
+            reasons.append("runs a pull request's own code with this repository's secrets (pull_request_target + checkout of the PR)")
+        if reasons:
+            self.add("WARNING", "workflow", rel, "; ".join(reasons))
+
     def lockfile(self, rel, text):
         # names appear as "node_modules/<name>", "<name>": , <name>@<version>, '<name>@ - never as part of another name
         hits = sorted(npm_names_in(text))
         if hits:
             self.add("DANGER", "malicious-package", rel, "lockfile installs known malicious package: " + ", ".join(hits[:3]))
+            return
+        bad = sorted(hijacked_in(text))
+        if bad:
+            self.add("DANGER", "hijacked-version", rel, "lockfile installs a hijacked release that ships malware: " + ", ".join(bad[:3])
+                     + " - update it and treat this computer as compromised if it was installed")
 
     def vscode(self, rel, low, text):
         if low == "tasks.json":
@@ -839,12 +1121,17 @@ class Scan:
             elif any(hidden for _, hidden in tasks):
                 self.add("WARNING", "vscode-autorun", rel, "hidden task runs automatically on folder open - check what it runs")
             return
+        if low in ("settings.json", "launch.json") and marker_hits(text):
+            self.add("DANGER", "campaign-marker", rel, f"known malware code in {low}")
+            return
         if low == "settings.json":
             self.pending_settings.append((rel, text))
             return
         if low == "launch.json":
-            if marker_hits(text):
-                self.add("DANGER", "campaign-marker", rel, "known malware code in launch.json")
+            for d in iter_dicts(load_json(text, jsonc=True)):
+                for key in ("program", "runtimeExecutable"):
+                    if isinstance(d.get(key), str) and d.get("type") in ("node", "pwa-node", None):
+                        self.runs += [(rel, "debug config", d[key])]
             return
         if low.endswith((".dict", ".txt", ".log", ".dat", ".bin")):
             compact = re.sub(r"\s+", "", text[:200000])
@@ -866,11 +1153,23 @@ class Scan:
                 bad = sorted(MALICIOUS_NPM & names)
                 if bad:
                     self.add("DANGER", "malicious-package", rel, "known malicious npm package: " + ", ".join(bad))
+                pinned = sorted(f"{n}@{v}" for n, v in deps.items() if isinstance(v, str) and v.strip().lstrip("=v") in HIJACKED_VERSIONS.get(n, ()))
+                if pinned:
+                    self.add("DANGER", "hijacked-version", rel, "pins a hijacked release that ships malware: " + ", ".join(pinned[:3]))
+                if k == "optionalDependencies":
+                    git = [n for n, v in deps.items() if isinstance(v, str) and re.match(r"(?:github:|git\+|git://|https://github\.com/)", v.strip())]
+                    if git:
+                        self.add("WARNING", "git-dependency", rel, f"optional dependency {git[0]} is installed straight from a git "
+                                 "repository - worms add these to run their own install script")
         scripts = as_dict(j.get("scripts"))
-        for k in LIFECYCLE:
+        for k in AUTO_SCRIPTS:
             v = scripts.get(k)
             if isinstance(v, str):
-                if LIFECYCLE_DANGER_RE.search(v):
+                if WORM_LOADER_RE.search(v):
+                    self.add("DANGER", "worm-loader", rel, f'"{k}" runs a Shai-Hulud worm loader: {v[:70]}')
+                elif AI_YOLO_RE.search(v):
+                    self.add("DANGER", "ai-cli-abuse", rel, f'"{k}" runs an AI coding assistant with its safety checks off: {v[:70]}')
+                elif LIFECYCLE_DANGER_RE.search(v):
                     self.add("DANGER", "install-script", rel, f'"{k}" downloads and runs code: {v[:70]}')
                 elif re.search(r"\bnode\s+-e\b.*(?:https?://|eval|Buffer\.from|atob)", v):
                     self.add("WARNING", "install-script", rel, f'"{k}" runs inline code: {v[:70]}')
@@ -882,6 +1181,9 @@ class Scan:
         for rel, text in self.pending_settings:
             auto, trust_off, autorun = settings_risks(text)
             reasons = [r for r, on in (("turns on automatic tasks", auto), ("disables workspace trust", trust_off)) if on]
+            j = as_dict(load_json(text, jsonc=True))
+            if any(j.get(k) is True for k in CHAT_AUTO_APPROVE):
+                reasons.append("lets AI chat agents run tools and commands without asking you")
             if autorun and (auto or any(loader_reason(c, freeform=c is text) for c in autorun)):
                 self.add("DANGER", "vscode-settings", rel, "turns on automatic tasks and hides an auto-run task inside settings")
             elif reasons:
@@ -909,8 +1211,27 @@ class Scan:
                     self.add("DANGER", "disguised-payload", target,
                              f"is run as code but disguised as {os.path.splitext(target)[1] or 'a data file'}")
         for src, label, target in resolved:
-            if target in self.flagged and src not in self.flagged and src.endswith("package.json"):
+            if target not in self.flagged and auto_label(label):
+                self.autorun_target(src, label, target)
+        for src, label, target in resolved:
+            if target in self.flagged and src not in self.flagged:
                 self.add("DANGER", "script-chain", src, f"{label} runs the infected {target}")
+
+    def autorun_target(self, src, label, target):
+        """A script that runs on its own (install script, agent hook, folder-open task, git hook): what the worms run."""
+        blob = read_sample(os.path.join(self.root, target))
+        if not blob or blob.sha in self.allow:
+            return
+        text = decode(blob.data)
+        what = f"{label} in {src} runs {target}, which "
+        if looks_obfuscated(text) or marker_hits(text):
+            self.add("DANGER", "autorun-payload", target, what + "is obfuscated malware code")
+        elif RUNTIME_DROP_RE.search(text) and SPAWN_RE.search(text):
+            self.add("DANGER", "autorun-payload", target, what + "downloads the Bun runtime to run a payload (Shai-Hulud worm loader)")
+        elif AI_YOLO_RE.search(text) and SPAWN_RE.search(text):
+            self.add("DANGER", "ai-cli-abuse", target, what + "starts an AI coding assistant with its safety checks off")
+        elif blob.size >= BIG_PAYLOAD and max(map(len, text.split("\n"))) >= BIG_LINE and SECRET_HUNT_RE.search(text):
+            self.add("DANGER", "autorun-payload", target, what + f"is a {blob.size // MB} MB minified bundle that hunts for tokens")
 
 
 def summary(code, findings, error=""):

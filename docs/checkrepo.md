@@ -65,7 +65,32 @@ Rules (each is covered by the self-test in `tests/`):
 11. **GlassWorm-style invisible code** — long runs of invisible Unicode characters (variation selectors / tag characters) hiding encoded code.
 12. **AI coding-agent traps** — `.claude/settings.json` hooks and `.mcp.json` servers that run loaders or read your SSH/AWS keys and send them out
     (the scanner also reads the in-repo scripts those hooks call), hidden invisible-Unicode instructions in `CLAUDE.md` / `AGENTS.md` / `.cursorrules`,
-    and API-URL overrides that could leak your AI API keys.
+    and API-URL overrides that could leak your AI API keys. Also read: rules and commands in `.cursor/rules/**`, `.windsurf/rules`,
+    `.clinerules`, `.github/instructions` and `prompts`, `.claude/commands`, `agents` and `skills`, `.kiro/steering`, `.amazonq/rules`,
+    `.roo`, `.continue/rules`. Settings that approve every MCP server a repo ships (`enableAllProjectMcpServers`), let AI chat
+    run tools without asking (`chat.tools.autoApprove`), or preload code into every program (`NODE_OPTIONS=--require …`) are reported.
+13. **Self-spreading npm worms (Shai-Hulud and successors, 2025–2026)** — their file names (`bun_environment.js`,
+    `tanstack_runner.js`, `truffleSecrets.json`, `shai-hulud-workflow.yml`, the `gh-token-monitor` wiper…), install scripts that
+    run their loaders (`node setup_bun.js`), payload fingerprints, and any script that runs on its own (install script, agent
+    hook, folder-open task, git hook, dev container) and is obfuscated, downloads the Bun runtime to run a payload, or is a
+    1 MB+ minified bundle that hunts for tokens.
+14. **Hijacked releases** — exact versions of popular packages that were taken over to ship malware: axios 1.14.1 / 0.30.4,
+    the September 2025 chalk / debug / ansi-* releases, the nx "s1ngularity" releases, litellm 1.82.7–8, telnyx 4.87.1–2 — in
+    `package.json` pins and npm / yarn / pnpm / bun / Python lockfiles. The same package at any other version is fine.
+15. **AI coding CLIs abused** — an install script (or a script one runs on its own) that starts `claude
+    --dangerously-skip-permissions`, `gemini --yolo` or `q --trust-all-tools`, as the nx "s1ngularity" malware did to hunt secrets.
+16. **GitHub Actions workflows** — a backdoor workflow that runs discussion text on a self-hosted runner (Sha1-Hulud 2.0),
+    workflows that dump every secret (`toJSON(secrets)`) and send it out or read the runner's memory (tj-actions compromise).
+    Warnings for command injection (issue / PR text inside `run:`) and `pull_request_target` checking out a PR's code.
+17. **Contagious Interview loaders (2025–2026)** — code that downloads its next stage from JSON storage sites (JSON Keeper,
+    JSONsilo, npoint.io) and runs it, or decodes data hidden in SVG image comments and runs it.
+18. **Code that runs without being called** — Python `.pth` files with `import` lines (they run at every Python start),
+    git hooks a repo ships (`.husky`, `.githooks`, lefthook, pre-commit) that steal keys or run a disguised file, and Dev
+    Container `initializeCommand`s that download and run code on your computer. Folder-open tasks are judged together with
+    every task they `dependsOn`, JavaScript inside `.vscode/` is checked like any other code, and debug configurations that
+    run a disguised file are caught.
+19. **Malicious Python packages** in `requirements*.txt`, `pyproject.toml`, `Pipfile(.lock)`, `poetry.lock`, `uv.lock`,
+    `pdm.lock` and `setup.py/cfg` — also in the git hooks, safe clone and the GitHub Action, not only the machine scan.
 
 In a git repository it scans what the repo contains (tracked files + new non-ignored files — including anything
 committed inside `node_modules`), skipping build output that git ignores — typically 0.1–0.7 s per repo. Any other
@@ -88,13 +113,13 @@ Measured during development (see the main README for the full method):
 | Same samples with every known marker and fingerprint switched off (behaviour rules only) | **71 / 71 detected** |
 | 18 popular open-source projects (106,225 files: Font-Awesome, Babel, Webpack, Prettier, ESLint, Vite, Jest, javascript-obfuscator, VS Code samples…) | **0 false alarms** |
 | A developer's own 14 projects including all installed packages (~240,000 files) | **0 false alarms**, 1 real leftover found |
-| Built-in self-test (`python3 scanner/tests/run_tests.py`) | 51 cases: must-catch, must-warn, must-stay-quiet, plus security and consistency checks |
+| Built-in self-test (`python3 scanner/tests/run_tests.py`) | 134 cases: must-catch, must-warn, must-stay-quiet, plus security and consistency checks |
 
 ## Limits — please read
 
 - It is built for **this family of attacks**. A completely new technique may not be detected — that's why the
   kit also hardens your editor, npm and git, and why the daily routine exists.
-- The automatic scan doesn't run in repos that use **Husky / lefthook** (they replace the hooks folder). The daily routine still scans them.
+- The automatic scan doesn't run in repos that use **Husky / lefthook** (they replace the hooks folder). The daily routine still scans them, and the hooks such a repo ships are themselves checked.
 - Clones made with **GUI buttons** (VS Code "Clone Repository", GitHub Desktop) get the after-clone warning, not the block.
 - Malware already running on your machine can skip git hooks. Combine the kit with the account protections in
   [`after-a-scan/hardening-checklist.md`](after-a-scan/hardening-checklist.md).

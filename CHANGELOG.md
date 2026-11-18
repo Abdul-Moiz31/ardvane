@@ -3,6 +3,34 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.4.0
+
+**Ardvane now catches the self-spreading npm worms of 2025–2026 and reads many more places code can hide.**
+
+- **Shai-Hulud and its successors** (Sha1-Hulud 2.0, Mini Shai-Hulud, ChainDrop): their payload and wiper file names and
+  fingerprints, install scripts that run their loaders, and any script that runs on its own (install script, AI-agent hook,
+  folder-open task, git hook, dev container) and is obfuscated, downloads the Bun runtime to run a payload, or is a large
+  minified bundle hunting for tokens.
+- **Hijacked releases** of popular packages: axios 1.14.1 / 0.30.4, the September 2025 chalk / debug releases, the nx
+  "s1ngularity" releases, litellm and telnyx. Found in `package.json` pins and in npm, yarn, pnpm, bun and Python lockfiles.
+- **GitHub Actions workflows** are read for the first time: backdoor workflows on self-hosted runners, secret dumps,
+  runner-memory theft, and warnings for command injection and `pull_request_target` running a PR's own code.
+- **AI coding assistants abused by malware**: install scripts that start `claude --dangerously-skip-permissions`,
+  `gemini --yolo` or `q --trust-all-tools`. More agent files are read (Cursor rules in subfolders, Windsurf, Cline,
+  Copilot instructions and prompts, Claude commands, agents and skills, Kiro, Amazon Q, Roo, Continue), and settings that
+  approve a repository's MCP servers or AI tools without asking are reported.
+- **Contagious Interview loaders**: code that fetches its next stage from JSON storage sites, or decodes data hidden in
+  SVG images, and runs it.
+- **Code that runs without being called**: Python `.pth` files, git hooks a repository ships (Husky, lefthook,
+  `.githooks`, pre-commit), Dev Container commands that run on your computer, tasks a folder-open task depends on, and
+  JavaScript inside `.vscode/`.
+- **Malicious Python packages** are now caught by the git hooks, safe clone and the GitHub Action too, not only by the
+  machine scan. New npm and PyPI names from 2026 reports were added.
+- **Project folders can be added and removed again.** Settings → What gets scanned failed with "folder not found" on any
+  computer without one of the default folders, so no change could be saved; "Reset to defaults" and "My project folders"
+  scans failed the same way. Missing folders are now marked and skipped, every spelling of a folder is one entry, and
+  text you are typing is no longer wiped when the page refreshes.
+
 ## 0.3.3
 
 - **Allow-listing a file now also clears the "disguised payload" alarm.** A script that a package.json script, task
