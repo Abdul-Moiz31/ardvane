@@ -104,7 +104,7 @@ export function history(reports, days = 30) {
     const tip = `${fmtDay(b.date)}: ` + (b.level === 'none' ? 'no check' :
       b.level === 'danger' ? `${plural(b.danger, 'serious finding')}` : b.level === 'warn' ? `${plural(b.warn, 'item')} worth a look` :
       b.level === 'ok' ? 'clean' : 'unknown') + (b.runs > 1 ? ` (${b.runs} runs)` : '');
-    svg.append(s('rect', { x, y: top + plotH - bh, width: bw, height: bh, rx: Math.min(4, bw / 3), class: 'bar bar-' + b.level }, s('title', {}, tip)));
+    svg.append(s('rect', { x, y: top + plotH - bh, width: bw, height: bh, rx: 0, class: 'bar bar-' + b.level }, s('title', {}, tip)));
   });
   [[0, 'start'], [Math.floor(days / 2), 'middle'], [days - 1, 'end']].forEach(([i, anchor]) => {
     const x = Number(i) * (bw + gap) + (anchor === 'start' ? 0 : anchor === 'end' ? bw : bw / 2);

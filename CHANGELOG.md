@@ -3,6 +3,13 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.5.0
+
+- **A new look for the dashboard.** It no longer looks like a stock web-app template: warm paper (or graphite in dark
+  mode) instead of grey and teal, ink-black buttons, the verdict set as a headline with a band in its colour, labels and
+  numbers in monospace like an instrument panel, ruled lists instead of floating cards, square status tags instead of
+  coloured pills, and findings shown as a log. Every page, both themes and phone widths.
+
 ## 0.4.0
 
 **Ardvane now catches the self-spreading npm worms of 2025–2026 and reads many more places code can hide.**
