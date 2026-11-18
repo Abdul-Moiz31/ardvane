@@ -95,7 +95,7 @@ if ($py -and (Test-Path "$Dest\checkrepo.py")) {
     } else { $cand = @("$HOME\Documents", "$HOME\Desktop", "$HOME\Downloads", "$HOME\source\repos") }
     $roots = @()
     foreach ($d in $cand) {
-        if (Test-Path $d) { $roots += $d } elseif (Test-Path "$Dest\projects.txt") { Chk "folder in projects.txt not found: $d" }
+        if (Test-Path $d) { $roots += $d } elseif (Test-Path "$Dest\projects.txt") { Chk "project folder not found, skipped: $d - remove it in Ardvane > Settings > What gets scanned if it's gone for good" }
     }
     $repos = @()
     if ($roots.Count -gt 0) {
@@ -103,7 +103,8 @@ if ($py -and (Test-Path "$Dest\checkrepo.py")) {
     }
     foreach ($g in $repos) { Scan-Dir $g.Parent.FullName }
     if (Test-Path "$HOME\Downloads") { Scan-Dir "$HOME\Downloads" }   # loose downloads, e.g. a coding test
-    if ($repos.Count -eq 0) { Chk 'scanned 0 repositories - nothing was checked. List your project folders in %USERPROFILE%\.checkrepo\projects.txt' }
+    if (@($cand).Count -eq 0) { Add-Line '  no project folders chosen - add yours in Ardvane > Settings > What gets scanned' }
+    elseif ($repos.Count -eq 0) { Chk 'scanned 0 repositories - nothing was checked. Choose your project folders in Ardvane > Settings > What gets scanned' }
     else { Add-Line "  scanned $($repos.Count) repositories" }
 } else { Chk 'checkrepo is not installed - run windows\install.ps1' }
 

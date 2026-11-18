@@ -31,8 +31,11 @@ First install the scanner ([checkrepo.md](checkrepo.md)). Then run these from th
 - **macOS privacy:** the first scheduled run may not be allowed to read Documents / Desktop / Downloads. The report
   says so ("can't read …" or "scanned 0 repositories"). Fix: System Settings → Privacy & Security → **Full Disk Access**
   → add `/bin/bash` (press ⌘⇧G in the file picker and type `/bin/bash`).
-- Choose which folders are scanned: list them in `~/.checkrepo/projects.txt`, one per line, `#` for comments
-  (default: Documents, Desktop, Downloads, `~/code`, `~/projects`, `source\repos`).
+- Choose which folders are scanned in **Ardvane → Settings → What gets scanned**: add a folder with the folder
+  picker or by typing its path, remove it with ×, or go back to the defaults (Documents, Desktop, Downloads, `~/code`,
+  `~/projects`, `source\repos`, whichever exist). The list is saved in `~/.checkrepo/projects.txt` (one folder per
+  line, `#` for comments), which you can also edit by hand. A listed folder that is missing, such as a drive that
+  isn't plugged in, is skipped and reported until it is back or you remove it. Your Downloads folder is always scanned.
 - After updating the kit, re-run the install-routine script so the fingerprints are refreshed.
 - Remove just the routine: `bash mac/install-routine.sh --remove` / `install-routine.ps1 -Remove`.
   (The kit's uninstaller also removes it.)
