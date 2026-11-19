@@ -118,7 +118,7 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
   for d in ${cand[@]+"${cand[@]}"}; do
     if [ ! -d "$d" ]; then [ -f "$DEST/projects.txt" ] && chk "project folder not found, skipped: ${d/#$HOME/~} — remove it in Ardvane › Settings › What gets scanned if it's gone for good"; continue; fi
     if ls "$d" >/dev/null 2>&1; then roots+=("$d")
-    else chk "can't read ${d/#$HOME/~} — macOS keeps background checks out of Documents, Desktop and Downloads. Open Ardvane and press \"Scan them now\" on the Overview, or keep your projects in a folder like ~/code"; fi
+    else chk "can't read ${d/#$HOME/~} — macOS keeps background checks out of Documents, Desktop and Downloads. Open Ardvane: on the Overview, \"Allow access\" lets the daily check in (once), and \"Scan them now\" scans them right away"; fi
   done
   # scan_dir DIR: report checkrepo's verdict. No result (a crash, a hang) is "could not scan", never clean.
   scan_dir() {

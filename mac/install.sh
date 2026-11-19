@@ -58,6 +58,7 @@ run chmod 755 "$DEST/hooks/dispatch"
 run cp "$SCANNER/safeclone/git-safeclone" "$DEST/bin/git-safeclone"
 for f in kitlib.py github_check.py autofix.py feed.py ed25519.py safeinstall.py hostcheck.py; do run cp "$SCANNER/$f" "$DEST/$f"; done   # helpers, GitHub check, fixer, signed detection feed, safe install
 run cp "$SCANNER/lists/malware-paths.txt" "$DEST/malware-paths.txt"
+for f in popular-npm.txt popular-pypi.txt; do run cp "$SCANNER/lists/$f" "$DEST/$f"; done   # what lookalike package names imitate
 run chmod 755 "$DEST/bin/git-safeclone"
 if [ $DRY -eq 1 ]; then echo "  [dry-run] create ~/.checkrepo/bin/checkrepo and ~/.checkrepo/bin/safe-install"; else
   printf '%s\n' "$PY" > "$DEST/python"     # the daily check runs from launchd with a minimal PATH: it reads this

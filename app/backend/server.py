@@ -15,12 +15,14 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import threading
 import time
 import urllib.parse
 
-from . import actions, detections, docs, fixes, launcher, reports, settings, status, tasks, updates
-from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
+from . import actions, detections, docs, fixes, historyjob, launcher, reports, settings, status, tasks, updates
+from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, DEST, HOME, IS_MAC, KIT, OS_NAME, ROUTINE_LABEL, UI, VERSION
+from .system import run
 from .scanjob import ScanJob
 
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -35,6 +37,7 @@ class App:
     token = ""
     port = 0
     job = None
+    hjob = None                 # history scan / cleanup (historyjob.HistoryJob)
     busy = 0
     last_seen = time.time()
     lock = threading.Lock()
@@ -79,6 +82,7 @@ def get_state(q):
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
             "blocked_folders": reports.blocked_folders(), "update": updates.status_now(),
+            "daily_app": dict(zip(("via", "ready"), daily_via_app())) if IS_MAC else None,
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
                          "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
                          "package_lookups": s["package_lookups"], "update_checks": s["update_checks"], "folders": folders,
@@ -300,7 +304,66 @@ def post_routine(b):
 
 
 def post_launcher(b):
-    return _long_action(launcher.install if b.get("action") == "install" else launcher.remove)
+    def go():
+        code, out = launcher.install() if b.get("action") == "install" else launcher.remove()
+        r = status.routine()
+        if code == 0 and r.get("on") and r.get("time"):         # the daily check now starts through the app (or not)
+            actions.set_routine(True, r["time"])
+        return code, out
+    return _long_action(go)
+
+
+def daily_via_app():
+    """(the scheduled daily check starts through the Ardvane app, the app can do that)."""
+    plist = os.path.join(HOME, "Library", "LaunchAgents", ROUTINE_LABEL + ".plist")
+    ready = os.path.isfile(os.path.join(launcher.daily_helper_path(), "Contents", "MacOS", "applet"))
+    try:
+        with open(plist, encoding="utf-8") as f:
+            via = launcher.DAILY_HELPER in f.read()
+    except OSError:
+        via = False
+    return via, ready
+
+
+def post_daily_now(b):
+    """Run the daily check now - through the app when it can, so macOS asks for folder access while you're here."""
+    via, ready = daily_via_app()
+    if ready:
+        code, out = run(["/usr/bin/open", "-g", "-a", launcher.daily_helper_path()], timeout=30)
+        if code != 0:
+            raise ApiError(500, out.strip()[-200:] or "couldn't start the daily check")
+        return {"ok": True, "via": "app"}
+    subprocess.Popen(["/bin/bash", os.path.join(DEST, "daily-check.sh")], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"ok": True, "via": "script"}
+
+
+def get_history(q):
+    return {"job": App.hjob.state() if App.hjob else None}
+
+
+def post_history(b):
+    """Start a history scan, prepare a clean history, or push one. A push needs the repository name typed again."""
+    action = str(b.get("action", ""))
+    if App.hjob and App.hjob.finished is None:
+        raise ApiError(409, "a history job is still running")
+    try:
+        target = historyjob.check_target(action, b.get("target"))
+    except ValueError as e:
+        raise ApiError(400, str(e))
+    if action == "push":
+        with open(os.path.join(target, "plan.json"), encoding="utf-8") as f:
+            plan = json.load(f)
+        if str(b.get("confirm", "")).strip() != plan.get("target"):
+            raise ApiError(400, "type the repository name to confirm the push")
+    App.hjob = historyjob.HistoryJob(action, target)
+    return {"job": App.hjob.state()}
+
+
+def post_history_cancel(b):
+    if App.hjob:
+        App.hjob.cancel()
+    return {"ok": True}
 
 
 def get_update(q):
@@ -329,11 +392,12 @@ def post_quit(b):
 
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
-              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update}
+              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update, "/api/history": get_history}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
                "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit,
-               "/api/update/check": post_update_check, "/api/update/apply": post_update_apply}
+               "/api/update/check": post_update_check, "/api/update/apply": post_update_apply,
+               "/api/history": post_history, "/api/history/cancel": post_history_cancel, "/api/daily/run-now": post_daily_now}
 
 
 # ---------------------------------------------------------------------------------------------- HTTP plumbing

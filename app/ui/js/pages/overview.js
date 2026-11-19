@@ -1,13 +1,14 @@
 // @ts-check
 // Overview = the security dashboard: one status, four numbers, what needs attention, and the trend. Details live on
 // their own pages (To-do, Scan, Protection, Reports).
-import { h, button, pill, card, banner, pageHead, empty, skeleton } from '../dom.js';
+import { h, button, pill, card, banner, pageHead, empty, skeleton, busy } from '../dom.js';
 import { icon } from '../icons.js';
-import { modal, closeModal } from '../feedback.js';
+import { modal, closeModal, toast, showError } from '../feedback.js';
+import { api } from '../api.js';
 import { fmtTime, nextRun, plural } from '../format.js';
 import { ring, history } from '../charts.js';
 import { S, loadTasks, loadReports, heroState, latestResult, protectionCount, scopeText, INFECTED_GUIDE } from '../store.js';
-import { installFlow, setRoutine, startScan, updateFlow } from '../actions.js';
+import { installFlow, setRoutine, startScan, updateFlow, launcherAction } from '../actions.js';
 import { recentReports, protectionRows } from '../components.js';
 import { loadFixes, confirmFix } from '../fixes.js';
 
@@ -47,10 +48,26 @@ function updateBanner() {
 function blockedFolders() {
   const list = /** @type {string[]} */ (S.data.blocked_folders || []);
   if (!list.length || (S.scan && S.scan.running)) return null;
+  const app = S.data.daily_app || {};
+  const scan = button('Scan them now', () => startScan('full', list), app.ready ? '' : 'btn-primary', 'radar');
+  /** @type {HTMLElement|null} */
+  let allow = null;
+  if (app.ready) {
+    allow = button('Allow access', () => busy(/** @type {HTMLButtonElement} */ (allow), async () => {
+      try {
+        await api('/api/daily/run-now', {});
+        toast('The daily check is running - click "Allow" when macOS asks whether Ardvane Daily Check may read your folders', 'ok');
+      } catch (e) { showError(e); }
+    }), 'btn-primary', 'lock');
+  } else if (S.data.os === 'mac') {
+    allow = button('Add the Ardvane app', () => launcherAction('install', /** @type {HTMLButtonElement} */ (allow)), 'btn-primary', 'app');
+  }
+  const how = app.ready
+    ? 'Press "Allow access": the daily check runs once now, and macOS asks whether "Ardvane Daily Check" may read these folders. Allow it once and every daily check covers them.'
+    : S.data.os === 'mac' ? 'Add the Ardvane app, then allow it to read these folders once: from then on every daily check covers them.' : '';
   return banner('warn', 'lock', `The daily check couldn't read ${list.join(', ')}`,
-    'macOS doesn\'t let background jobs open Documents, Desktop or Downloads, so the projects there weren\'t checked. ' +
-    'Ardvane can scan them from here. To have the daily check cover them on its own, keep your projects in a folder like ~/code.',
-    button('Scan them now', () => startScan('full', list), 'btn-primary', 'radar'));
+    'macOS doesn\'t let background jobs open Documents, Desktop or Downloads, so the projects there weren\'t checked. ' + how,
+    h('div', { class: 'row' }, allow, scan));
 }
 
 // ------------------------------------------------------------------------------------------------ status

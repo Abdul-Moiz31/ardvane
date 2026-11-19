@@ -19,7 +19,11 @@ What is checked:
 Against:
   - Ardvane's own lists (built in, plus the signed detection feed): offline.
   - OSV.dev's database of malicious packages (MAL- advisories; it includes the OpenSSF malicious-packages list),
-    unless turned off in Settings. Only public package names and versions are sent - never packages from a private
+    unless turned off in Settings.
+  - The reputation of the packages you name (from the npm registry / PyPI, with the same setting): a version
+    published in the last 48 hours, a package created this week, a version released by someone who never published
+    the package before, a name one typo away from a popular package, and install scripts. These warn and ask before
+    installing (in a terminal; elsewhere they only warn). Only public package names and versions are sent - never packages from a private
     registry - and answers are cached for a day.
 If a package is known malware, nothing is installed. If OSV.dev can't be reached, the offline lists are used and you
 are told. If this script itself fails, the install goes ahead with a warning: it never breaks your package manager.
@@ -80,11 +84,12 @@ PIP_SPEC_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*(?:==\
 
 
 class Pkg:
-    """One package that would be installed: ecosystem ("npm" | "PyPI"), name, exact version or None."""
-    __slots__ = ("eco", "name", "version", "public")
+    """One package that would be installed: ecosystem ("npm" | "PyPI"), name, exact version or None. direct: named in
+    the command (not pulled in as a dependency)."""
+    __slots__ = ("eco", "name", "version", "public", "direct")
 
-    def __init__(self, eco, name, version=None, public=True):
-        self.eco, self.name, self.version, self.public = eco, name, version, public
+    def __init__(self, eco, name, version=None, public=True, direct=False):
+        self.eco, self.name, self.version, self.public, self.direct = eco, name, version, public, direct
 
     def key(self):
         return f"{self.eco}:{self.name}@{self.version or ''}"
@@ -247,6 +252,12 @@ def resolve_npm(folder, specs, args):
 
 
 # ---------------------------------------------------------------- what a command would install
+def direct(pkgs):
+    for p in pkgs:
+        p.direct = True
+    return pkgs
+
+
 def plan(tool, args, folder):
     """(packages, notes) for an install command, or None if `tool args` doesn't install anything."""
     base = "pip" if tool == "pip3" else ("npx" if tool == "bunx" else tool)
@@ -256,22 +267,22 @@ def plan(tool, args, folder):
         specs = [a.split("=", 1)[1] for a in args if a.startswith("--package=")]
         specs += [args[i + 1] for i, a in enumerate(args) if a in ("-p", "--package") and i + 1 < len(args)]
         specs = specs or named("npm", args)[:1]
-        return [p for p in map(npm_spec, specs) if p], []
+        return direct([p for p in map(npm_spec, specs) if p]), []
     sub, rest = subcommand(tool, args)
     if sub not in INSTALLS[tool]:
         return None
     notes = []
     if base == "pip":
-        pkgs = [p for p in map(pip_spec, named("pip", rest)) if p]
+        pkgs = direct([p for p in map(pip_spec, named("pip", rest)) if p])
         for f in requirement_files(rest):
             pkgs += read_requirements(os.path.join(folder, os.path.expanduser(f)))
         if pkgs:
             notes.append("pip: checked the packages you named; their own dependencies are checked by Ardvane's scans")
         return pkgs, notes
     if sub in ("exec", "x", "dlx"):                                 # npm exec / pnpm dlx / yarn dlx / bun x: run a package
-        return [p for p in map(npm_spec, named(base, rest)[:1]) if p], notes
+        return direct([p for p in map(npm_spec, named(base, rest)[:1]) if p]), notes
     specs = named(base, rest)
-    pkgs = [p for p in map(npm_spec, specs) if p]
+    pkgs = direct([p for p in map(npm_spec, specs) if p])
     tree = resolve_npm(folder, specs, rest) if tool == "npm" and specs else None
     if tree is not None:
         pkgs += tree
@@ -355,6 +366,146 @@ def osv_hits(pkgs, cache):
     return blocked, warned
 
 
+# ---------------------------------------------------------------- reputation (the packages you name)
+NPM_REGISTRY = "https://registry.npmjs.org/"
+NPM_DOWNLOADS = "https://api.npmjs.org/downloads/point/last-week/"
+PYPI_JSON = "https://pypi.org/pypi/"
+FRESH_HOURS, NEW_DAYS, FEW_DOWNLOADS = 48, 7, 500
+INSTALL_HOOKS = ("preinstall", "install", "postinstall")
+
+
+def popular(eco):
+    """Names people install all the time (lists/popular-*.txt): what typosquats imitate."""
+    name = "popular-npm.txt" if eco == "npm" else "popular-pypi.txt"
+    for folder in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "lists"), DEST):
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                return {l.strip().lower() for l in f if l.strip() and not l.startswith("#")}
+        except OSError:
+            continue
+    return set()
+
+
+def distance(a, b, limit=3):
+    """Edit distance with swaps (Damerau-Levenshtein, optimal string alignment); stops early past `limit`."""
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    prev2, prev = None, list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+            if prev2 is not None and i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                cur[j] = min(cur[j], prev2[j - 2] + 1)
+        prev2, prev = prev, cur
+    return prev[-1]
+
+
+def lookalike(name, eco):
+    """The popular package `name` imitates (one typo away, or the same name with different separators), or None."""
+    names = popular(eco)
+    if not names or name in names:
+        return None
+    bare = name.split("/")[-1]
+    squash = re.sub(r"[-_.]", "", bare)
+    best = None
+    for p in names:
+        pb = p.split("/")[-1]
+        if len(pb) < 4 or pb == bare and p != name:
+            continue
+        d = 0 if re.sub(r"[-_.]", "", pb) == squash else distance(bare, pb, 2)
+        if d <= (1 if len(pb) < 8 else 2):
+            rank = (p.startswith("@"), d, p)                       # the plain, closest popular name
+            best = min(best, rank) if best else rank
+    return best[2] if best else None
+
+
+def _hours_since(stamp, now):
+    try:
+        t = time.mktime(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+        return (now - t) / 3600
+    except (TypeError, ValueError):
+        return None
+
+
+def npm_reputation(p, now):
+    doc = http_json(NPM_REGISTRY + p.name.replace("/", "%2F"), timeout=10)
+    times, versions = doc.get("time") or {}, doc.get("versions") or {}
+    ver = p.version or (doc.get("dist-tags") or {}).get("latest")
+    out = []
+    age = _hours_since(times.get(ver, ""), now)
+    created = _hours_since(times.get("created", ""), now)
+    if created is not None and created < NEW_DAYS * 24:
+        out.append((True, f"the package itself is only {max(1, int(created // 24))} day(s) old"))
+    elif age is not None and age < FRESH_HOURS:
+        out.append((False, f"version {ver} was published {int(age)} hour(s) ago; hijacked releases are usually caught within days"))
+    order = [v for v, _ in sorted(((v, t) for v, t in times.items() if v in versions), key=lambda x: x[1])]
+    if ver in order and order.index(ver) > 0 and age is not None and age < 30 * 24:
+        who = ((versions.get(ver) or {}).get("_npmUser") or {}).get("name")
+        before = {((versions.get(v) or {}).get("_npmUser") or {}).get("name") for v in order[max(0, order.index(ver) - 15):order.index(ver)]}
+        if who and before and who not in before:
+            out.append((True, f"version {ver} ({int(age // 24)} day(s) old) was published by {who}, who never published this package "
+                              "before - how hijacked releases look"))
+    scripts = {k: v for k, v in ((versions.get(ver) or {}).get("scripts") or {}).items() if k in INSTALL_HOOKS}
+    if scripts:
+        k, v = next(iter(scripts.items()))
+        out.append((False, f"runs an install script ({k}: {str(v)[:60]})"))
+    near = lookalike(p.name, "npm")
+    if near:
+        try:
+            weekly = int(http_json(NPM_DOWNLOADS + p.name.replace("/", "%2F"), timeout=10).get("downloads", 0))
+        except Exception:
+            weekly = 0
+        if weekly < FEW_DOWNLOADS:
+            out.append((True, f"the name looks like '{near}' but hardly anyone installs it ({weekly} downloads last week) - did you mean {near}?"))
+    return out
+
+
+def pypi_reputation(p, now):
+    doc = http_json(PYPI_JSON + p.name + "/json", timeout=10)
+    releases = doc.get("releases") or {}
+    ver = p.version or (doc.get("info") or {}).get("version")
+    out = []
+    first = [str(f.get("upload_time_iso_8601") or f.get("upload_time") or "") for fs in releases.values() for f in fs]
+    created = _hours_since(min(first), now) if first else None
+    files = releases.get(ver) or []
+    age = _hours_since(min(str(f.get("upload_time_iso_8601") or f.get("upload_time") or "") for f in files), now) if files else None
+    if created is not None and created < NEW_DAYS * 24:
+        out.append((True, f"the package itself is only {max(1, int(created // 24))} day(s) old"))
+    elif age is not None and age < FRESH_HOURS:
+        out.append((False, f"version {ver} was published {int(age)} hour(s) ago; hijacked releases are usually caught within days"))
+    near = lookalike(p.name, "PyPI")
+    if near:
+        out.append((True, f"the name looks like '{near}' - did you mean {near}?"))
+    return out
+
+
+def reputation(pkgs, cache, now=None):
+    """[(pkg, [reasons])] for the packages named in the command. Never raises: a lookup that fails is skipped."""
+    now = now or time.time()
+    seen = cache.setdefault("reputation", {})
+    out = []
+    for p in pkgs:
+        if not p.direct:
+            continue
+        key = p.key()
+        hit = seen.get(key)
+        if hit and now - hit[0] < 6 * 3600:
+            reasons = hit[1]
+        else:
+            try:
+                reasons = npm_reputation(p, now) if p.eco == "npm" else pypi_reputation(p, now)
+            except Exception:
+                continue
+            seen[key] = [now, reasons]
+        if reasons:
+            out.append((p, reasons))
+    if len(seen) > 5000:
+        cache["reputation"] = {}
+    return out
+
+
 def load_cache():
     cache = read_json(CACHE, {})
     if len(cache.get("packages", {})) > CACHE_MAX:
@@ -384,10 +535,16 @@ def check(tool, args, folder=None, use_osv=None):
                 b, w = osv_hits(public, cache)
                 blocked += [x for x in b if x[0].key() not in {y[0].key() for y in blocked}]
                 warned += w
-                write_json(CACHE, cache)
             except Exception as e:
                 notes.append(f"OSV.dev couldn't be reached ({e.__class__.__name__}), so only Ardvane's own list was checked")
-    return blocked, warned, notes, len({(x.eco, x.name) for x in unique})
+            bad = {x[0].name for x in blocked}
+            risky = [(p, r) for p, r in reputation([x for x in public if x.name not in bad], cache)]
+            try:
+                write_json(CACHE, cache)
+            except OSError:
+                pass
+            return blocked, warned, notes, len({(x.eco, x.name) for x in unique}), risky
+    return blocked, warned, notes, len({(x.eco, x.name) for x in unique}), []
 
 
 def by_package(findings):
@@ -413,7 +570,7 @@ def main(argv):
         return 0
     if result is None:
         return 0
-    blocked, warned, notes, count = result
+    blocked, warned, notes, count, risky = result
     tty = sys.stderr.isatty()
     R, Y, D, X = ("\033[1;31m", "\033[1;33m", "\033[2m", "\033[0m") if tty else ("",) * 4
     rows = by_package(blocked)
@@ -430,9 +587,35 @@ def main(argv):
                 print(f"   {'':4}  {'':36}  {why}", file=sys.stderr)
         print(f"   If you are 100% sure this is a false alarm:  command {tool} {' '.join(args)}\n", file=sys.stderr)
         return BLOCKED
+    strong = [(p, r) for p, r in risky if any(s for s, _ in r)]
+    for p, reasons in risky:
+        if (p, reasons) not in strong:
+            for _, why in reasons:
+                print(f"{D}Ardvane: {p.label()}: {why}{X}", file=sys.stderr)
+    if strong:
+        print(f"\n{Y}⚠️  Ardvane: think twice before installing:{X}", file=sys.stderr)
+        for p, reasons in strong:
+            print(f"   {p.eco:4}  {p.label()}", file=sys.stderr)
+            for _, why in reasons:
+                print(f"         - {why}", file=sys.stderr)
+        if not ask("   Install anyway? [y/N] "):
+            print(f"{R}Not installed.{X}", file=sys.stderr)
+            return BLOCKED
     if count:
         print(f"{D}Ardvane: checked {count} package{'s' if count != 1 else ''} - no known malware{X}", file=sys.stderr)
     return 0
+
+
+def ask(question):
+    """A yes/no question on the terminal. Without one (a script, CI, an editor task) the install goes ahead: the
+    warning was printed, and blocking unattended installs would break builds."""
+    try:
+        with open("/dev/tty" if os.name != "nt" else "CON", "r+") as tty:
+            tty.write(question)
+            tty.flush()
+            return tty.readline().strip().lower() in ("y", "yes")
+    except OSError:
+        return True
 
 
 if __name__ == "__main__":

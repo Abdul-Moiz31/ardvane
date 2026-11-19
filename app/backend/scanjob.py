@@ -88,6 +88,7 @@ class ScanJob:
         self.on_finish = on_finish
         self.update_feed, self.feed_note = update_feed, None
         self.autofixed = []
+        self.github_live = {"phase": "", "done": 0, "total": 0, "current": "", "items": []}
         self.lock = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -137,16 +138,45 @@ class ScanJob:
     def _run_github(self):
         cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py")] + ([self.github_user] if self.github_user else [])
         cmd += [a for r in self.github_repos for a in ("--repo", r)] + ["--json"]
-        p = self._start(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
+        p = self._start(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW,
+                        env=dict(kit_env(), ARDVANE_PROGRESS="1"))
         if not p:
             return
-        out, _ = p.communicate()
+        chunks = []
+        reader = threading.Thread(target=lambda: chunks.append(p.stdout.read()), daemon=True)
+        reader.start()
+        for raw in p.stderr:                                  # live progress, shown on the Scan page while it runs
+            try:
+                self._github_event(json.loads(raw.decode("utf-8", "replace")))
+            except (ValueError, TypeError, AttributeError):
+                continue
+        p.wait()
+        reader.join(timeout=30)
+        out = chunks[0] if chunks else b""
         try:
             self.github = json.loads(out.decode("utf-8", "replace") or "{}")
         except ValueError:
             self.github = {}
         if not self.github and not self.cancelled:
             self.github = {"error": "the GitHub check did not finish"}
+
+    def _github_event(self, ev):
+        live = self.github_live
+        kind = ev.get("event")
+        if kind == "phase":
+            live["phase"] = str(ev.get("text", ""))[:160]
+            live["done"], live["total"] = 0, int(ev.get("total") or 0)
+        elif kind == "branch":
+            live["current"], live["bytes"] = f"{ev.get('repo')} · {ev.get('branch')}", 0
+        elif kind == "download":
+            live["bytes"] = int(ev.get("bytes") or 0)
+        elif kind in ("audited", "scanned"):
+            live["done"] = int(ev.get("done") or live["done"] + 1) if kind == "audited" else live["done"] + 1
+            live["current"], live["bytes"] = str(ev.get("repo", "")), 0
+            live["items"] = (live.get("items", []) + [{
+                "kind": kind, "repo": str(ev.get("repo", "")), "outcome": str(ev.get("outcome", "")),
+                "findings": [str(f) for f in ev.get("findings", [])][:3], "force_push": bool(ev.get("force_push")), "shared": bool(ev.get("shared")),
+                "branches": int(ev.get("branches") or 0)}])[-300:]
 
     def cancel(self):
         with self.lock:
@@ -183,6 +213,7 @@ class ScanJob:
             "steps_total": total, "steps_done": max(0, len(sections) - (1 if running else 0)),
             "sections": sections, "github_user": self.github_user,
             "github_repos": self.github_repos, "feed": self.feed_note, "folders": self.folders, "autofixed": self.autofixed,
+            "github_live": self.github_live if self.github_on else None,
             "danger": sum(1 for i in items if i["level"] == "danger"),
             "warn": sum(1 for i in items if i["level"] == "warn" and not i["dismissed"]),
             "ok": sum(1 for i in items if i["level"] == "ok"),

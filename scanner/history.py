@@ -59,7 +59,9 @@ def gh_exe():
 
 
 def clone_url(name):
-    return f"https://github.com/{name}.git"
+    """Where owner/name lives: GitHub, or a GitHub Enterprise server set in ARDVANE_GITHUB_URL."""
+    base = os.environ.get("ARDVANE_GITHUB_URL", "https://github.com/").rstrip("/") + "/"
+    return f"{base}{name}.git"
 
 
 def credential_args():

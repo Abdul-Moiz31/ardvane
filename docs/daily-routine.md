@@ -28,11 +28,12 @@ First install the scanner ([checkrepo.md](checkrepo.md)). Then run these from th
 
 - macOS uses **launchd**: if the Mac is asleep at the scheduled time, the check runs when it wakes (not if it was switched off).
 - Windows uses **Task Scheduler** with "run as soon as possible after a missed start".
-- **macOS privacy:** macOS doesn't let background jobs read Documents, Desktop or Downloads, so the daily check reports
-  "can't read …" for them. Open Ardvane: the Overview names those folders and **Scan them now** scans them from the
-  dashboard, which runs with your own permissions. To have the daily check cover your projects on its own, keep them in
-  a folder macOS doesn't protect, such as `~/code` or `~/Developer`, and add it under Settings → What gets scanned.
-  (Giving `/bin/bash` Full Disk Access also works, but it gives that access to every shell script on the computer.)
+- **macOS privacy:** macOS doesn't let background jobs read Documents, Desktop or Downloads. With the Ardvane app
+  installed (Protection → Ardvane app icon), the daily check runs *as the app*, so macOS asks once whether **Ardvane**
+  may read those folders: allow it, and every daily check covers them. The Overview's **Allow access** runs the check
+  now, so you can answer while you're at the computer; **Scan them now** scans the folders right away from the
+  dashboard. Without the app, keep your projects in a folder macOS doesn't protect (`~/code`, `~/Developer`). Giving
+  `/bin/bash` Full Disk Access is not recommended: it gives that access to every shell script on the computer.
 - Choose which folders are scanned in **Ardvane → Settings → What gets scanned**: add a folder with the folder
   picker or by typing its path, remove it with ×, or go back to the defaults (Documents, Desktop, Downloads, `~/code`,
   `~/projects`, `source\repos`, whichever exist). The list is saved in `~/.checkrepo/projects.txt` (one folder per

@@ -518,3 +518,6 @@ details.more > .stack { margin-top: 8px; }
   .hero-icon { width: 96px; height: 96px; }
 }
 .release-notes { padding: 0; max-width: none; font-size: 14px; max-height: 340px; overflow: auto; }
+.live-list { max-height: 420px; overflow: auto; margin: 0 -22px -20px; border-top: 1px solid var(--border); }
+.enter .live-list .list-row { animation: none; }
+.live-list .list-row:first-child { animation: slide .45s var(--spring) both; }

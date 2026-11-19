@@ -11,7 +11,7 @@ import { fixesCard, autofixedBanner } from '../fixes.js';
 export function renderScan() {
   const head = pageHead('Scan', 'Read-only: a scan never changes, deletes or runs anything from your files.');
   const sc = S.scan;
-  if (sc && sc.running) return [head, progress(sc)];
+  if (sc && sc.running) return [head, progress(sc), sc.phase === 'github' ? githubLive(sc) : null].filter(Boolean);
   return [head, sc ? results(sc) : null, setup()].filter(Boolean);
 }
 
@@ -39,6 +39,33 @@ function setup() {
     h('div', { class: 'row' }, h('div', { class: 'spacer' }),
       button(o.mode === 'quick' ? 'Start quick scan' : 'Start full scan', () => startScan(), 'btn-primary btn-lg', 'play')));
   return card(S.scan ? 'Scan again' : 'New scan', 'radar', body);
+}
+
+/** The GitHub step, live: what it is doing, and every repository as it is audited or scanned. @param {any} sc */
+function githubLive(sc) {
+  const live = sc.github_live || {};
+  const items = /** @type {any[]} */ (live.items || []).slice().reverse();
+  const bar = h('div');
+  bar.style.width = live.total ? Math.max(4, Math.round(100 * Math.min(live.done, live.total) / live.total)) + '%' : '6%';
+  const word = (/** @type {any} */ it) => it.kind === 'audited'
+    ? (it.outcome === 'found' ? ['danger', 'Danger'] : it.outcome === 'warn' ? ['warn', 'Check'] : ['ok', 'Audited'])
+    : it.outcome === 'found' ? ['danger', 'Malware'] : it.outcome === 'error' ? ['warn', 'Not scanned'] : it.outcome === 'unchanged' ? ['neutral', 'Unchanged'] : ['ok', 'Clean'];
+  return card('GitHub, live', 'github', h('div', { class: 'card-pad stack' },
+    h('div', { class: 'row' }, h('div', { class: 'loading-spinner' }),
+      h('div', { class: 'grow' }, h('div', { class: 'title', text: live.phase || 'Connecting to GitHub…' }),
+        h('div', { class: 'help mono', text: live.current ? `now: ${live.current}${live.bytes > 1e6 ? ` · ${Math.round(live.bytes / 1e6)} MB downloaded` : ''}` : '' })),
+      live.total ? h('span', { class: 'mono muted', text: `${Math.min(live.done, live.total)} / ${live.total}` }) : null),
+    h('div', { class: 'progress' }, bar),
+    items.length ? h('div', { class: 'list live-list' }, items.slice(0, 60).map(it => {
+      const [lvl, label] = word(it);
+      return h('div', { class: 'list-row' },
+        h('div', { class: 'row-icon ' + (lvl === 'neutral' ? '' : lvl) }, icon(it.kind === 'audited' ? 'shield' : 'radar')),
+        h('div', { class: 'grow' }, h('div', { class: 'title mono', text: it.repo }),
+          h('div', { class: 'desc', text: it.kind === 'audited'
+            ? (it.findings.length ? it.findings.join(' · ') : 'runners, deploy keys, webhooks, invitations') + (it.force_push ? ' · default branch can be force-pushed' : '')
+            : it.outcome === 'unchanged' ? 'clean at its last push, skipped' : `${plural(it.branches || 1, 'branch', 'branches')} scanned${it.shared ? ` · shared with you by ${it.repo.split('/')[0]}` : ''}` })),
+        pill(lvl, label));
+    })) : h('p', { class: 'help', text: 'Repositories appear here as they are checked.' })));
 }
 
 /** @param {import('../store.js').Scan} sc */

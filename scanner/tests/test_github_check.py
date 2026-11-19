@@ -87,6 +87,72 @@ class WormRepos(unittest.TestCase):
         self.assertIn("rotate", result["findings"][0][2])
 
 
+class AccountAudit(unittest.TestCase):
+    """Ways an attacker keeps access after stealing a token, on the repositories you administer."""
+
+    def setUp(self):
+        self.audit_file = gc.AUDIT_FILE
+        gc.AUDIT_FILE = os.path.join(tempfile.mkdtemp(), "audit.json")
+
+    def tearDown(self):
+        gc.AUDIT_FILE = self.audit_file
+
+    def client(self, answers):
+        class FakeClient:
+            gh = "gh"
+            truncated = []
+
+            def get(self, path, limit=0):
+                if path not in answers:
+                    raise RuntimeError("HTTP 404: Not Found")
+                return answers[path]
+        return FakeClient()
+
+    def test_runners_keys_hooks_invitations_and_force_push(self):
+        now = datetime.datetime(2026, 11, 19, tzinfo=datetime.timezone.utc)
+        repos = [{"full_name": "me/app", "default_branch": "main", "permissions": {"admin": True}},
+                 {"full_name": "me/safe", "default_branch": "main", "permissions": {"admin": True}},
+                 {"full_name": "other/lib", "default_branch": "main", "permissions": {"admin": False}}]
+        answers = {
+            "/repos/me/app/actions/runners": {"runners": [{"name": "SHA1HULUD", "os": "macOS", "status": "online"}]},
+            "/repos/me/app/keys": [{"title": "deploy", "created_at": "2026-11-10T00:00:00Z", "read_only": False},
+                                   {"title": "old ci", "created_at": "2024-01-01T00:00:00Z", "read_only": True}],
+            "/repos/me/app/hooks": [{"config": {"url": "https://webhook.site/abc"}, "created_at": "2024-01-01T00:00:00Z"}],
+            "/repos/me/app/invitations": [{"invitee": {"login": "stranger"}, "permissions": "write"}],
+            "/repos/me/app/rules/branches/main": [],
+            "/repos/me/safe/actions/runners": {"runners": []}, "/repos/me/safe/keys": [], "/repos/me/safe/hooks": [],
+            "/repos/me/safe/invitations": [], "/repos/me/safe/rules/branches/main": [{"type": "non_fast_forward"}],
+            "/user/keys": [{"title": "new laptop", "created_at": "2026-11-18T00:00:00Z"}],
+        }
+        result = {"findings": [], "notes": []}
+        gc.audit_account(self.client(answers), repos, result, now=now)
+        text = "\n".join(f"{f[0]} {f[1]} {f[2]}" for f in result["findings"])
+        self.assertIn("DANGER me/app self-hosted runner 'SHA1HULUD'", text)
+        self.assertIn("deploy key 'deploy'", text)
+        self.assertNotIn("old ci", text, "old keys are not news")
+        self.assertIn("webhook.site", text)
+        self.assertIn("stranger", text)
+        self.assertIn("SSH key 'new laptop'", text)
+        self.assertNotIn("other/lib", text, "only repositories you administer")
+        self.assertTrue(any("1 of 2 repositories" in n and "me/app" in n for n in result["notes"]), result["notes"])
+
+    def test_a_missing_scope_is_not_an_error_and_results_are_cached_for_a_day(self):
+        repos = [{"full_name": "me/app", "default_branch": "main", "permissions": {"admin": True}}]
+        result = {"findings": [], "notes": []}
+        gc.audit_account(self.client({}), repos, result)                         # every call: 404
+        self.assertEqual(result["findings"], [])
+        calls = []
+
+        class Counting:
+            gh, truncated = "gh", []
+
+            def get(self, path, limit=0):
+                calls.append(path)
+                raise RuntimeError("HTTP 404")
+        gc.audit_account(Counting(), repos, {"findings": [], "notes": []})
+        self.assertEqual(calls, [], "a recent audit is reused")
+
+
 class Usernames(unittest.TestCase):
     def test_invalid_usernames_are_refused_before_any_request(self):
         self.assertEqual(gc.main(["bad/name"]), 3)
@@ -237,7 +303,8 @@ class Repositories(unittest.TestCase):
         self.assertEqual(gc.main(["--repo", "not a repo"]), 3)
 
     def test_listed_repositories_are_scanned_on_every_branch(self):
-        repos = {"octo/clean": {"full_name": "octo/clean", "pushed_at": "2026-01-02T00:00:00Z", "size": 10, "default_branch": "main"},
+        repos = {"octo/clean": {"full_name": "octo/clean", "pushed_at": "2026-01-02T00:00:00Z", "size": 10, "default_branch": "main",
+                                "permissions": {"admin": False, "push": True}},
                  "Octo/Old": {"full_name": "Octo/Old", "pushed_at": "2026-01-01T00:00:00Z", "size": 10, "default_branch": "main"}}
         branches = {"octo/clean": [{"name": "main"}, {"name": "dev"}], "Octo/Old": [{"name": "main"}]}
 
@@ -257,14 +324,15 @@ class Repositories(unittest.TestCase):
 
         scanned = []
         original = gc.scan_branch
-        gc.scan_branch = lambda client, cr, repo, branch, result, maybe_empty=False: scanned.append((repo, branch)) or "clean"
+        gc.scan_branch = lambda client, cr, repo, branch, result, maybe_empty=False, shared=False: \
+            scanned.append((repo, branch, shared)) or "clean"
         try:
             result = {"scanned": ["someone/else"], "branches_scanned": 0, "findings": [], "notes": [], "listed": []}
             seen = {"Octo/Old": "2026-01-01T00:00:00Z|all"}                    # clean on every branch since its last push
             gc.check_listed(FakeClient(), None, ["octo/clean", "octo/old", "octo/missing", "someone/else"], False, result, seen)
         finally:
             gc.scan_branch = original
-        self.assertEqual(scanned, [("octo/clean", "main"), ("octo/clean", "dev")])
+        self.assertEqual(scanned, [("octo/clean", "main", True), ("octo/clean", "dev", True)])   # someone else's: said so
         self.assertEqual([(r["repo"], r["outcome"], r["branches"]) for r in result["listed"]],
                          [("octo/clean", "clean", 2), ("Octo/Old", "unchanged", 0), ("octo/missing", "error", 0),
                           ("someone/else", "scanned above", 0)])

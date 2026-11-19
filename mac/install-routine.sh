@@ -27,12 +27,20 @@ cp "$HERE/daily-check.sh" "$DEST/daily-check.sh" && chmod 755 "$DEST/daily-check
 for f in "$DEST/checkrepo.py" "$DEST/kitlib.py" "$DEST/github_check.py" "$DEST/autofix.py" "$DEST/feed.py" "$DEST/ed25519.py" "$DEST/safeinstall.py" "$DEST/hostcheck.py" "$DEST/malware-paths.txt" "$DEST/hooks/dispatch" "$DEST/bin/git-safeclone" "$DEST/bin/safe-install" "$DEST/python" "$DEST/daily-check.sh"; do
   [ -f "$f" ] && echo "$(shasum -a 256 "$f" | cut -d' ' -f1) $f" >> "$DEST/fingerprints.txt"
 done
+# Through the Ardvane app's daily-check helper when it is installed: macOS then asks once whether *Ardvane Daily Check*
+# may read Documents, Desktop and Downloads. Without the app, bash runs it, and those folders stay closed to it.
+HELPER="$HOME/Applications/Ardvane.app/Contents/Helpers/Ardvane Daily Check.app"
+if [ -x "$HELPER/Contents/MacOS/applet" ]; then
+  PROGRAM="<string>/usr/bin/open</string><string>-g</string><string>-j</string><string>-a</string><string>$HELPER</string>"
+else
+  PROGRAM="<string>/bin/bash</string><string>$DEST/daily-check.sh</string>"
+fi
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key><array><string>/bin/bash</string><string>$DEST/daily-check.sh</string></array>
+  <key>ProgramArguments</key><array>$PROGRAM</array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>$H</integer><key>Minute</key><integer>$M</integer></dict>
   <key>StandardOutPath</key><string>$DEST/reports/launchd.log</string>
   <key>StandardErrorPath</key><string>$DEST/reports/launchd.log</string>
