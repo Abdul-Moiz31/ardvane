@@ -143,8 +143,8 @@ def post_scan(b):
 def _after_scan(job):
     """Automatic mode: apply the auto-safe fixes as soon as a scan finishes."""
     try:
-        done = fixes.apply_auto_if_enabled()
-        if any(e.get("ok") and e.get("kind") in ("quarantine", "process") for e in done):
+        done = fixes.apply_auto_if_enabled(infected_projects())
+        if any(e.get("ok") and e.get("kind") in ("quarantine", "process", "clean-file") for e in done):
             tasks.start_incident()
         return done
     except Exception as e:      # a failed fix must never lose the scan results

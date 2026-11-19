@@ -122,7 +122,7 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
     line="$("$PY" "$DEST/checkrepo.py" --summary "$1" 2>/dev/null)"
     case "${line%% *}" in
       0) ;;
-      1) bad "DANGER in $where: ${line#* }" ;;
+      1) bad "DANGER in $where: ${line#* }"; infected+=(--project "$1") ;;
       2) chk "worth a look in $where: ${line#* }" ;;
       *) chk "could not scan $where (${line#* }) — run: checkrepo \"$where\"" ;;
     esac
@@ -135,7 +135,7 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
     top="$(cd "$1" && pwd -P)"; real="$(cd "$1" && cd "${hp/#\~/$HOME}" 2>/dev/null && pwd -P)"
     case "$real" in "$top"/*) ;; *) chk "git hooks are switched off in ${1/#$HOME/~} (its core.hooksPath='$hp'), so clones and pushes there aren't checked" ;; esac
   }
-  repos=0
+  repos=0; infected=()
   [ ${#roots[@]} -gt 0 ] && while IFS= read -r g; do
     repos=$((repos+1)); scan_dir "$(dirname "$g")"; repo_hooks "$(dirname "$g")"
   done < <(find "${roots[@]}" -maxdepth 5 -name .git -type d -not -path "*/node_modules/*" 2>/dev/null)
@@ -228,8 +228,9 @@ if [ ${#gh_args[@]} -gt 0 ] && [ -f "$DEST/github_check.py" ]; then
 fi
 
 # ---------------------------------------------------------------- 8. automatic fixes (only in "Automatic" mode)
-if [ -n "$PY" ] && [ -f "$DEST/autofix.py" ] && [ "$(setting autofix ask)" = "auto" ]; then
-  fixed="$("$PY" "$DEST/autofix.py" auto 2>&1)"
+fixmode="$(setting autofix ask)"
+if [ -n "$PY" ] && [ -f "$DEST/autofix.py" ] && { [ "$fixmode" = "auto" ] || [ "$fixmode" = "all" ]; }; then
+  fixed="$("$PY" "$DEST/autofix.py" auto ${infected[@]+"${infected[@]}"} 2>&1)"
   if [ -n "$fixed" ]; then
     out "8. Automatic fixes"
     while IFS= read -r l; do out "$l"; done <<< "$fixed"

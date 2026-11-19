@@ -17,7 +17,7 @@ GITHUB_USER_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 MAX_DISMISSED = 500
 MAX_FOLDERS = 50
 MAX_REPOS = 100
-AUTOFIX_MODES = ("ask", "auto", "off")          # same as scanner/autofix.py MODES (a test keeps them equal)
+AUTOFIX_MODES = ("ask", "auto", "all", "off")          # same as scanner/autofix.py MODES (a test keeps them equal)
 
 
 _lock = threading.RLock()       # requests arrive on several threads; each change is load + modify + save

@@ -21,9 +21,10 @@ def apply(fix_id, projects=()):
     return autofix().apply(fix_id, "manual", projects)
 
 
-def apply_auto_if_enabled():
-    """After a scan: apply auto-safe fixes when the user chose Automatic. Returns the history entries."""
-    return autofix().apply_auto() if mode() == "auto" else []
+def apply_auto_if_enabled(projects=()):
+    """After a scan: apply what the chosen mode allows ("auto": safe fixes, "all": also remove the malware found,
+    including the malicious parts of the infected projects). Returns the history entries."""
+    return autofix().apply_auto(projects) if mode() in ("auto", "all") else []
 
 
 def undo(entry_id):

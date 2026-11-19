@@ -56,18 +56,22 @@ Some problems the kit can fix for you. Choose how in **Settings → Fixes**:
 | Mode | What happens |
 |---|---|
 | **Ask me** (default) | Each fixable problem gets a **Fix…** button that shows exactly what will change before anything happens. |
-| **Automatic** | Safe fixes run as soon as a scan or the daily check finds the problem. You get a summary and can undo each one. |
+| **Automatic: safe fixes** | Your editor, npm and git settings, and malware in known malware locations, as soon as a scan or the daily check finds them. |
+| **Automatic: remove malware too** | Everything Ardvane finds is removed as soon as it is found: malware processes are stopped, malware files and extensions quarantined, injected code cut out of your projects. You get a summary and can undo each one. |
 | **Off** | Only report; you fix everything yourself. |
 
-| Fix | Ask me | Automatic |
-|---|---|---|
-| Editor auto-run on / Workspace Trust off | ✅ | ✅ |
-| npm install scripts allowed | ✅ | ✅ |
-| The kit's git hooks switched off | ✅ | ✅ |
-| Malware in a known malware location (`scanner/lists/malware-paths.txt`) | ✅ | ✅ (names marked `ask` in the list always ask) |
-| A malware process that is running | ✅ | asks first |
-| An infected project folder, or a loose script that only *might* be malware | ✅ | asks first |
-| Anything on GitHub, rotating secrets | — | — (stays in your to-do list) |
+| Fix | Ask me | Automatic: safe | Automatic: remove malware |
+|---|---|---|---|
+| Editor auto-run on / Workspace Trust off | ✅ | ✅ | ✅ |
+| npm install scripts allowed | ✅ | ✅ | ✅ |
+| The kit's git hooks switched off | ✅ | ✅ | ✅ |
+| Malware in a known malware location (`scanner/lists/malware-paths.txt`) | ✅ | ✅ (names marked `ask` ask first) | ✅ |
+| A malware process that is running | ✅ | asks first | ✅ |
+| A loose script with malware code, a malicious editor extension | ✅ | asks first | ✅ |
+| A shutdown / wipe line malware added to your shell start-up file | ✅ | asks first | ✅ (only that line) |
+| **Inside an infected project:** code hidden after spaces in a config file, a fake font or other payload file, the worm's `.gitignore` lines and install scripts, hidden instructions in AI-agent files, malicious tasks, hooks and workflows | ✅ | asks first | ✅ (only the malicious part; your code stays) |
+| Moving a whole infected project to quarantine | ✅ | asks first | asks first |
+| Anything on GitHub, rotating secrets, updating a hijacked package | — | — | — (stays in your to-do list) |
 
 How it stays safe:
 
