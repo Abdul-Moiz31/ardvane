@@ -14,9 +14,10 @@ import unittest
 
 SANDBOX = tempfile.mkdtemp(prefix="dashboard-test-")
 os.environ["HOME"] = os.environ["USERPROFILE"] = SANDBOX          # must be set before the backend is imported
+os.environ["ARDVANE_NO_UPDATE_CHECK"] = "1"                        # no network from the tests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend import config, docs, reports, scanjob, settings, tasks    # noqa: E402
+from backend import config, docs, reports, scanjob, settings, tasks, updates    # noqa: E402
 from backend.server import App, Handler                            # noqa: E402
 import http.server                                                 # noqa: E402
 
@@ -117,6 +118,80 @@ class BlockedFolders(unittest.TestCase):
     def test_older_wording_is_understood_too(self):
         self.daily("  ⚠️  can't read ~/Documents — give /bin/bash Full Disk Access\n", 2_000_000_000)
         self.assertEqual(reports.blocked_folders(), ["~/Documents"])
+
+
+class Updates(unittest.TestCase):
+    """A newer version is offered for the way Ardvane was installed, and installed with fixed commands only."""
+
+    def setUp(self):
+        for f in (updates.STATE, config.SETTINGS):
+            if os.path.exists(f):
+                os.remove(f)
+        self.saved = (updates.KIT, updates.INSTALLED, updates.latest_for, updates.notes_between, updates.can_update,
+                      updates.upgrade_commands, updates.status.protection)
+
+    def tearDown(self):
+        (updates.KIT, updates.INSTALLED, updates.latest_for, updates.notes_between, updates.can_update,
+         updates.upgrade_commands, updates.status.protection) = self.saved
+
+    def test_install_method(self):
+        updates.INSTALLED, updates.KIT = True, "/opt/homebrew/opt/ardvane/libexec"
+        self.assertEqual(updates.method(), "brew")
+        updates.KIT = "/home/linuxbrew/.linuxbrew/Cellar/ardvane/0.8.0/libexec"
+        self.assertEqual(updates.method(), "brew")
+        updates.INSTALLED, updates.KIT = False, SANDBOX
+        self.assertEqual(updates.method(), "unknown")
+        os.makedirs(os.path.join(SANDBOX, ".git"), exist_ok=True)
+        self.assertEqual(updates.method(), "git")
+        shutil.rmtree(os.path.join(SANDBOX, ".git"))
+
+    def test_a_newer_version_is_offered_with_its_notes_only(self):
+        updates.latest_for = lambda how: "99.0.0"
+        updates.notes_between = lambda cur, new: [{"version": "99.0.0", "notes": "- **Big** thing"}, {"version": "0.0.1", "notes": "old"}]
+        updates.check()
+        st = updates.status_now()
+        self.assertTrue(st["available"])
+        self.assertEqual(st["latest"], "99.0.0")
+        self.assertEqual([n["version"] for n in st["notes"]], ["99.0.0"], "notes of versions you already have are left out")
+
+    def test_nothing_is_offered_when_up_to_date_or_turned_off(self):
+        updates.latest_for = lambda how: config.VERSION
+        updates.check()
+        self.assertFalse(updates.status_now()["available"])
+        updates.latest_for = lambda how: "99.0.0"
+        updates.notes_between = lambda cur, new: []
+        updates.check()
+        with settings.editing() as st:
+            st["update_checks"] = False
+        self.assertFalse(updates.status_now()["available"])
+
+    def test_a_failed_check_is_reported_not_raised(self):
+        def boom(how):
+            raise OSError("offline")
+        updates.latest_for = boom
+        state = updates.check()
+        self.assertIn("couldn't check", state["error"])
+        self.assertFalse(updates.status_now()["available"])
+
+    def test_apply_runs_the_fixed_commands_and_stops_at_the_first_failure(self):
+        updates.can_update = lambda how: (True, "test")
+        updates.status.protection = lambda: {"installed": False}
+        updates.upgrade_commands = lambda how: [[sys.executable, "-c", "print('upgraded')"]]
+        code, log = updates.apply()
+        self.assertEqual(code, 0, log)
+        self.assertIn("upgraded", log)
+        updates.upgrade_commands = lambda how: [[sys.executable, "-c", "import sys; sys.exit(3)"], [sys.executable, "-c", "print('never')"]]
+        code, log = updates.apply()
+        self.assertEqual(code, 3)
+        self.assertNotIn("never", log)
+
+    def test_apply_refuses_when_this_install_cant_update_itself(self):
+        updates.can_update = lambda how: (False, "run: brew upgrade ardvane")
+        self.assertEqual(updates.apply(), (1, "run: brew upgrade ardvane"))
+
+    def test_brew_upgrades_the_tap_formula(self):
+        cmds = updates.upgrade_commands("brew")
+        self.assertEqual(cmds[-1][1:], ["upgrade", "abdul-moiz31/ardvane/ardvane"])
 
 
 class Settings(unittest.TestCase):
@@ -486,6 +561,9 @@ class Server(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/scan", j, json.dumps({"folders": ["/not/a/folder"]}))[0], 400)
         self.assertEqual(self.req("POST", "/api/settings", j, json.dumps({"folders": {"add": "/not/a/folder"}}))[0], 400)
         self.assertEqual(self.req("POST", "/api/settings", j, json.dumps({"folders": {"rename": "x"}}))[0], 400)
+        if os.path.exists(updates.STATE):
+            os.remove(updates.STATE)
+        self.assertEqual(self.req("POST", "/api/update/apply", j, "{}")[0], 409)       # nothing to update to
         self.assertEqual(self.req("POST", "/api/ping", j, "x" * 70000)[0], 413)
         self.assertEqual(self.req("POST", "/api/ping", j, "[1,2]")[0], 400)
         self.assertEqual(self.req("GET", "/api/doc?path=../README.md", self.key())[0], 404)

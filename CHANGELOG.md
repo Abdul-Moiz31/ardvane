@@ -3,6 +3,19 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.9.0
+
+- **Update Ardvane from the dashboard.** When a new version is out, the Overview says so, with what's new. **Update**
+  shows the release notes first, then installs the new version the way you installed Ardvane (Homebrew, pipx or a git
+  clone), refreshes your protection and the daily check from it, and restarts the dashboard on it - the page reloads
+  by itself. Settings → Updates shows your version and has **Check now** and an on/off switch. Ardvane looks for a
+  new version about twice a day while the dashboard is open: one download from GitHub (PyPI for pipx) that sends
+  nothing about this computer. Homebrew is only offered versions its tap already has.
+- **"I think I'm infected" is calm until it matters:** the link to the recovery guide is always in the sidebar,
+  but it is only red while a scan has found a threat.
+- **Fewer false alarms:** the standard `.pth` files Python tools write (virtualenv, setuptools, editable installs,
+  namespace packages) are no longer reported anywhere, including inside build caches such as `.vercel/cache`.
+
 ## 0.8.0
 
 - **Secrets committed to your repositories.** GitHub, npm, AWS, OpenAI, Anthropic, Slack, Stripe and PyPI keys and

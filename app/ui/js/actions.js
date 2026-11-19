@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { h, button, busy, $ } from './dom.js';
 import { toast, modal, closeModal, confirmBox, outputBox, showError, errorText } from './feedback.js';
 import { plural } from './format.js';
+import { markdown } from './markdown.js';
 import { S, refresh, rerender } from './store.js';
 
 /** What the installer does, in plain language (the exact steps are shown underneath). */
@@ -148,3 +149,47 @@ export async function dismiss(key, undo) {
 
 /** @param {boolean} off */
 export function setOfflineBanner(off) { const el = $('#offline'); if (el) el.hidden = !off; }
+
+/** Release notes first, then update: install the new version, refresh protection, restart on it. */
+export function updateFlow() {
+  const u = S.data.update;
+  if (!u || !u.available) return;
+  const notes = h('div', { class: 'doc release-notes' });
+  notes.innerHTML = (u.notes || []).map(/** @param {{version: string, notes: string}} n */ n => markdown(`## ${n.version}\n\n${n.notes}`)).join('')
+    || markdown('No release notes were found for this version.');
+  const go = button(`Update to ${u.latest}`, () => busy(go, () => runUpdate()), 'btn-primary', 'refresh');
+  modal(`Ardvane ${u.latest} is available`, [
+    h('p', { text: `You have ${u.current}. ${u.how}, your protection and daily check are refreshed from the new version, and the dashboard restarts. It takes about a minute.` }),
+    notes], [button('Not now', () => closeModal(), 'btn-ghost'), go]);
+}
+
+async function runUpdate() {
+  try {
+    const r = await api('/api/update/apply', {});
+    if (!r.ok) return outputBox('The update did not finish', false, r.output);
+    modal('Restarting Ardvane', [h('p', { text: `Updated to ${S.data.update.latest}. The dashboard is restarting on the new version - this page reloads by itself.` }),
+      h('div', { class: 'loading', role: 'status' }, h('span', { class: 'loading-spinner' }), 'Waiting for the new version…')], []);
+    await waitForRestart();
+  } catch (e) { showError(e); }
+}
+
+/** Poll until the restarted dashboard answers on the same address, then reload the page into it. */
+async function waitForRestart() {
+  await new Promise(r => setTimeout(r, 2500));
+  for (let i = 0; i < 90; i++) {
+    try { await api('/api/ping'); location.reload(); return; } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
+  }
+  modal('Ardvane was updated', [h('p', { text: 'The new version is installed, but the dashboard didn\'t come back by itself. Open Ardvane again from its app icon or with the ardvane command.' })],
+    [button('Close', () => closeModal(), 'btn-primary')]);
+}
+
+/** Ask the update source now. */
+export async function checkForUpdate() {
+  try {
+    const r = await api('/api/update/check', {});
+    S.data.update = r.update;
+    rerender();
+    toast(r.update.error ? r.update.error : r.update.available ? `Ardvane ${r.update.latest} is available` : `Ardvane ${r.update.current} is the latest version`,
+      r.update.error ? 'danger' : 'ok');
+  } catch (e) { showError(e); }
+}

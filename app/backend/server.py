@@ -19,7 +19,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, detections, docs, fixes, launcher, reports, settings, status, tasks
+from . import actions, detections, docs, fixes, launcher, reports, settings, status, tasks, updates
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, HOME, KIT, OS_NAME, UI, VERSION
 from .scanjob import ScanJob
 
@@ -78,10 +78,10 @@ def get_state(q):
     protection = status.protection()
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
-            "blocked_folders": reports.blocked_folders(),
+            "blocked_folders": reports.blocked_folders(), "update": updates.status_now(),
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
                          "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
-                         "package_lookups": s["package_lookups"], "folders": folders,
+                         "package_lookups": s["package_lookups"], "update_checks": s["update_checks"], "folders": folders,
                          "folder_info": settings.folder_info(folders),
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
             "feed": detections.status(), "scan": App.scan_state(s["dismissed"])}
@@ -250,7 +250,7 @@ def post_settings(b):
                 s["github_repos"] = settings.change_list(s["github_repos"], b["github_repos"], settings.clean_github_repos)
             if "github_enabled" in b:
                 s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
-            for key in ("feed_updates", "package_lookups"):     # on/off switches
+            for key in ("feed_updates", "package_lookups", "update_checks"):     # on/off switches
                 if key in b:
                     s[key] = bool(b[key])
             if "autofix" in b:
@@ -303,16 +303,37 @@ def post_launcher(b):
     return _long_action(launcher.install if b.get("action") == "install" else launcher.remove)
 
 
+def get_update(q):
+    return {"update": updates.status_now()}
+
+
+def post_update_check(b):
+    updates.check()
+    return {"update": updates.status_now()}
+
+
+def post_update_apply(b):
+    """Install the new version, refresh protection from it, then restart on it (same port and key: the tab reloads)."""
+    if not updates.status_now()["available"]:
+        raise ApiError(409, "Ardvane is already up to date")
+    result = _long_action(updates.apply)
+    if result["ok"]:
+        updates.restart(App.port, App.token, App.httpd.shutdown)
+        result["restarting"] = True
+    return result
+
+
 def post_quit(b):
     threading.Thread(target=App.httpd.shutdown, daemon=True).start()
     return {"ok": True}
 
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
-              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview}
+              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
                "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
-               "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit}
+               "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit,
+               "/api/update/check": post_update_check, "/api/update/apply": post_update_apply}
 
 
 # ---------------------------------------------------------------------------------------------- HTTP plumbing

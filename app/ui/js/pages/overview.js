@@ -7,7 +7,7 @@ import { modal, closeModal } from '../feedback.js';
 import { fmtTime, nextRun, plural } from '../format.js';
 import { ring, history } from '../charts.js';
 import { S, loadTasks, loadReports, heroState, latestResult, protectionCount, scopeText, INFECTED_GUIDE } from '../store.js';
-import { installFlow, setRoutine, startScan } from '../actions.js';
+import { installFlow, setRoutine, startScan, updateFlow } from '../actions.js';
 import { recentReports, protectionRows } from '../components.js';
 import { loadFixes, confirmFix } from '../fixes.js';
 
@@ -20,6 +20,7 @@ export function renderOverview() {
   return [
     pageHead('Overview', 'Your computer\'s security at a glance.'),
     statusBar(),
+    updateBanner(),
     blockedFolders(),
     kpis(),
     h('div', { class: 'overview-grid' }, attention(),
@@ -29,6 +30,17 @@ export function renderOverview() {
       card('Protection', 'shield', h('div', { class: 'list' }, protectionRows(true)), h('a', { href: '#protection', text: 'Manage' })),
       card('Recent activity', 'file', recentReports(4), h('a', { href: '#reports', text: 'All reports' }))),
   ];
+}
+
+/** A newer Ardvane: what's new, and one button to update. */
+function updateBanner() {
+  const u = S.data.update;
+  if (!u || !u.available) return null;
+  const first = (u.notes && u.notes[0] && u.notes[0].notes.split('\n').find(/** @param {string} l */ l => /^\s*[-*]\s+\*\*/.test(l))) || '';
+  const teaser = first.replace(/^\s*[-*]\s+/, '').replace(/\*\*/g, '').split('. ')[0];
+  return banner('ok', 'refresh', `Ardvane ${u.latest} is available`,
+    `You have ${u.current}.` + (teaser ? ` New: ${teaser}.` : '') + (u.can_update ? '' : ` To update: ${u.how}.`),
+    u.can_update ? button('See what\'s new', () => updateFlow(), 'btn-primary', 'refresh') : null);
 }
 
 /** Folders the daily check couldn't open: macOS keeps background jobs out of Documents, Desktop and Downloads. */

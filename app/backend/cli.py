@@ -65,14 +65,21 @@ def _stop_on_sigterm(signum, frame):
 
 
 def serve(open_browser=True, port=0):
+    restart_port, restart_token = os.environ.pop("ARDVANE_PORT", ""), os.environ.pop("ARDVANE_TOKEN", "")
+    if restart_port.isdigit() and restart_token:                 # restarted by an update from the dashboard
+        time.sleep(float(os.environ.pop("ARDVANE_RESTART_DELAY", "2") or 2))
+        port, open_browser = int(restart_port), False
     url = running_instance()
     if url:
         print(f"{APP_NAME} is already open.", flush=True)
         if open_browser:
             webbrowser.open(url)
         return 0
-    App.token = secrets.token_urlsafe(32)
-    App.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    App.token = restart_token if restart_port.isdigit() and restart_token else secrets.token_urlsafe(32)
+    try:
+        App.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError:                                 # that port was taken in the meantime: any free one
+        App.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     App.httpd.daemon_threads = True
     App.port = App.httpd.server_address[1]
     App.last_seen = time.time()
