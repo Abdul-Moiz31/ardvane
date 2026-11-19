@@ -3,6 +3,16 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.11.0
+
+**A new look for the dashboard, and a new mark: the vane.**
+
+- The dashboard is redesigned to match the new website: ink-tinted surfaces, one sea-glass teal accent, Geist and
+  Geist Mono (bundled with the app, so nothing loads from the internet), sentence-case labels instead of small
+  capitals, and calmer buttons and tags. Light and dark mode both follow it.
+- New logo and app icon: a weather vane, the "vane" in Ardvane, replacing the shield. Re-add the app icon from
+  Protection to see it in your Applications folder or Start menu.
+
 ## 0.10.0
 
 **Ardvane now looks through a repository's whole history, cleans malware out of it, audits your GitHub account,
