@@ -66,7 +66,7 @@ function statusBar() {
       h('span', {}, icon('refresh'), rt.on ? `Daily check at ${rt.time}` : 'Daily check off'),
       h('span', {}, icon('lock'), 'Nothing leaves this computer'));
   }
-  return h('div', { class: 'hero status tone-' + st.tone },
+  return h('div', { class: 'hero status tone-' + st.tone + (sc && sc.running ? ' scanning' : '') },
     h('div', { class: 'hero-icon' }, icon(st.icon)),
     h('div', { class: 'hero-text' }, h('h1', { text: st.title }), h('p', { text: st.text }), detail),
     actions);
