@@ -21,6 +21,11 @@ Usage:
   github_check.py USERNAME [--days N] [--max-repos N] [--all-branches] [--json] [--rescan]
   github_check.py [USERNAME] --repo OWNER/NAME [--repo ...] [--json] [--rescan]
       a repository can be given as owner/name, a github.com URL or a git@github.com: address
+  github_check.py [USERNAME] --list --json
+      the repositories you can see, each marked as yours or shared with you (for choosing what to scan)
+
+  --owned-only   only your own and your organizations' repositories, not ones other people shared with you
+                 (by default every repository you can push to is checked: the worm spreads through all of them)
 
 Limits: every repository of the account is listed (all pages). An archive holds only the latest files of one branch,
 not the history, so it is much smaller than the repository size GitHub shows. Archives are streamed to a temporary file
@@ -395,7 +400,8 @@ def scan_repo(client, cr, repo, all_branches, result, seen):
         except RuntimeError as e:
             result["notes"].append(f"{name}: could not list branches ({e}), scanning the default branch only")
     outcomes = set()
-    shared = (repo.get("permissions") or {}).get("admin") is False      # you can push to it, but it isn't yours
+    # another person's repository you can push to (not yours, not an organization's): only its owner administers it
+    shared = (repo.get("owner") or {}).get("type") == "User" and (repo.get("permissions") or {}).get("admin") is False
     for i, branch in enumerate(branches):
         progress("branch", repo=name, branch=branch, done=i, total=len(branches))
         outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not repo.get("size"), shared=shared))
@@ -442,7 +448,7 @@ def check_listed(client, cr, names, rescan, result, seen):
         done.add(name.lower())
 
 
-def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos=()):
+def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos=(), owned_only=False):
     cr = load_checkrepo()
     remove_stale_temp()
     login = gh_login()
@@ -452,7 +458,7 @@ def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos
     seen = load_seen()
     try:
         if user:
-            check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen)
+            check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen, owned_only)
         check_listed(client, cr, repos, rescan, result, seen)
     except RateLimited as e:
         result["notes"].append(f"stopped early: {e}")
@@ -581,13 +587,36 @@ def audit_account(client, repos, result, now=None, force=False):
     result["audited"] = len(owned)
 
 
-def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen):
-    """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
+def account_path(user, login, owned_only=False):
+    """The listing of an account's repositories: every one you can reach through gh, or only the public ones."""
     # sorted by name, not by push time: a push during the listing can't shift repositories between pages
     if login and login.lower() == user.lower():
-        path = "/user/repos?affiliation=owner,collaborator,organization_member&sort=full_name"
-    else:
-        path = f"/users/{user}/repos?type=owner&sort=full_name"
+        return "/user/repos?affiliation=owner,organization_member" + ("" if owned_only else ",collaborator") + "&sort=full_name"
+    return f"/users/{user}/repos?type=owner&sort=full_name"
+
+
+def list_repos(user=""):
+    """The repositories you can choose from: [{repo, owner, kind, private, pushed_at}], newest push first.
+    kind: "yours", "org" (an organization's) or "shared" (another person's, shared with you)."""
+    login = gh_login()
+    user = user or login
+    if not user:
+        raise RuntimeError("log in with `gh auth login`, or enter your GitHub username first")
+    client = Client(use_gh=bool(login))
+    rows = {}
+    for r in client.get_all(account_path(user, login)):
+        if isinstance(r, dict) and r.get("full_name"):
+            owner = (r.get("owner") or {}).get("login") or r["full_name"].split("/")[0]
+            kind = "yours" if owner.lower() == user.lower() else "org" if (r.get("owner") or {}).get("type") == "Organization" else "shared"
+            rows[r["full_name"].lower()] = {"repo": r["full_name"], "owner": owner, "kind": kind,
+                                            "private": bool(r.get("private")), "pushed_at": r.get("pushed_at") or ""}
+    return sorted(rows.values(), key=lambda x: x["pushed_at"], reverse=True)
+
+
+def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen, owned_only=False):
+    """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
+    path = account_path(user, login, owned_only)
+    if not (login and login.lower() == user.lower()):
         if login:
             result["notes"].append(f"gh is logged in as {login}, not {user}: only {user}'s public repositories are visible")
         else:
@@ -657,7 +686,7 @@ def parse_args(argv):
         opts["user"] = positional[0].strip().lstrip("@")
         if not USER_RE.fullmatch(opts["user"]):
             raise ValueError(f"'{opts['user']}' is not a valid GitHub username")
-    if not opts["user"] and not opts["repos"]:
+    if not opts["user"] and not opts["repos"] and "--list" not in opts["flags"]:
         raise ValueError("name a GitHub username, or repositories with --repo owner/name")
     return opts
 
@@ -673,9 +702,23 @@ def main(argv):
         print(f"github_check: {e}", file=sys.stderr)
         return 3
     user, as_json, all_branches = o["user"], "--json" in o["flags"], "--all-branches" in o["flags"]
+    if "--list" in o["flags"]:
+        try:
+            rows = list_repos(user)
+        except (RuntimeError, ValueError) as e:
+            print(json.dumps({"error": str(e)}) if as_json else f"github_check: {e}", file=sys.stdout if as_json else sys.stderr)
+            return 3
+        if as_json:
+            print(json.dumps({"repos": rows}))
+        else:
+            for r in rows:
+                print(f"{r['repo']}{ {'yours': '', 'org': '  (organization)', 'shared': '  (shared with you)'}[r['kind']] }"
+                      f"{'  private' if r['private'] else ''}")
+        return 0
     what = user or ", ".join(o["repos"])
     try:
-        res = check(user, o["days"], o["max_repos"], "--rescan" in o["flags"], all_branches, o["repos"])
+        res = check(user, o["days"], o["max_repos"], "--rescan" in o["flags"], all_branches, o["repos"],
+                    owned_only="--owned-only" in o["flags"])
     except (RuntimeError, ValueError) as e:
         if as_json:
             print(json.dumps({"user": user, "repos_listed": o["repos"], "error": str(e)}))

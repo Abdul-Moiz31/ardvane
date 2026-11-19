@@ -212,7 +212,9 @@ sys.path.insert(0, sys.argv[2])
 try:
     from github_check import USER_RE, parse_repo
     s = json.load(open(sys.argv[1], encoding="utf-8"))
-    if s.get("github_enabled") and USER_RE.fullmatch(str(s.get("github_user", ""))): print(s["github_user"])
+    if s.get("github_enabled") and USER_RE.fullmatch(str(s.get("github_user", ""))):
+        print(s["github_user"])
+        if s.get("github_scope") == "owned": print("--owned-only")
     for r in s.get("github_repos") or []:
         try: name = parse_repo(r)
         except ValueError: continue

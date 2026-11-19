@@ -521,3 +521,10 @@ details.more > .stack { margin-top: 8px; }
 .live-list { max-height: 420px; overflow: auto; margin: 0 -22px -20px; border-top: 1px solid var(--border); }
 .enter .live-list .list-row { animation: none; }
 .live-list .list-row:first-child { animation: slide .45s var(--spring) both; }
+
+/* Settings > GitHub: choosing repositories from the login's list */
+.pick-list { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+.pick-row { cursor: pointer; }
+.pick-row input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.pick-row.on { background: var(--surface-2); }
+.row.wrap { flex-wrap: wrap; }

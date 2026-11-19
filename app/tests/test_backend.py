@@ -238,6 +238,18 @@ class Settings(unittest.TestCase):
         settings.save(s)
         self.assertEqual(settings.load()["github_repos"], ["o/a"])
 
+    def test_github_scope(self):
+        from backend import server
+        self.assertEqual(settings.load()["github_scope"], "all")                  # every repository you can push to
+        server.post_settings({"github_scope": "owned"})
+        self.assertEqual(settings.load()["github_scope"], "owned")
+        with self.assertRaises(server.ApiError):
+            server.post_settings({"github_scope": "everything"})
+        s = settings.load()
+        s["github_scope"] = "nonsense"                                          # hand-edited: back to the default
+        settings.save(s)
+        self.assertEqual(settings.load()["github_scope"], "all")
+
     def test_list_changes_apply_to_the_saved_list(self):
         self.assertEqual(settings.change_list(["a/b"], {"add": "c/d"}, settings.clean_github_repos), ["a/b", "c/d"])
         self.assertEqual(settings.change_list(["a/b", "c/d"], {"remove": "a/b"}, settings.clean_github_repos), ["c/d"])

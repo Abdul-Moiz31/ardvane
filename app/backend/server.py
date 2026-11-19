@@ -22,7 +22,7 @@ import urllib.parse
 
 from . import actions, detections, docs, fixes, historyjob, launcher, reports, settings, status, tasks, updates
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, DEST, HOME, IS_MAC, KIT, OS_NAME, ROUTINE_LABEL, UI, VERSION
-from .system import run
+from .system import kit_env, python_exe, run
 from .scanjob import ScanJob
 
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -84,7 +84,7 @@ def get_state(q):
             "blocked_folders": reports.blocked_folders(), "update": updates.status_now(),
             "daily_app": dict(zip(("via", "ready"), daily_via_app())) if IS_MAC else None,
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
-                         "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
+                         "github_repos": s["github_repos"], "github_scope": s["github_scope"], "feed_updates": s["feed_updates"],
                          "package_lookups": s["package_lookups"], "update_checks": s["update_checks"], "folders": folders,
                          "folder_info": settings.folder_info(folders),
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
@@ -133,14 +133,14 @@ def post_scan(b):
     folders = [p for p in (os.path.abspath(os.path.expanduser(f)) for f in asked) if os.path.isdir(p)]
     if asked and not folders:      # folders that are gone for now (an unplugged drive) are skipped, not fatal
         raise ApiError(400, "none of these folders exist: " + ", ".join(asked[:3]))
-    user, repos = "", []
+    user, repos, owned_only = "", [], False
     if b.get("github"):
         s = settings.load()
-        user, repos = s["github_user"], s["github_repos"]
+        user, repos, owned_only = s["github_user"], s["github_repos"], s["github_scope"] == "owned"
         if not user and not repos:
             raise ApiError(400, "add your GitHub username or a repository in Settings first")
     App.job = ScanJob("quick" if b.get("mode") == "quick" else "full", folders, user, repos, on_finish=_after_scan,
-                      update_feed=settings.load()["feed_updates"])
+                      update_feed=settings.load()["feed_updates"], owned_only=owned_only)
     return {"scan": App.job.state()}
 
 
@@ -254,6 +254,10 @@ def post_settings(b):
                 s["github_repos"] = settings.change_list(s["github_repos"], b["github_repos"], settings.clean_github_repos)
             if "github_enabled" in b:
                 s["github_enabled"] = bool(b["github_enabled"]) and bool(s["github_user"])
+            if "github_scope" in b:
+                if b["github_scope"] not in ("all", "owned"):
+                    raise ValueError("unknown GitHub scope")
+                s["github_scope"] = b["github_scope"]
             for key in ("feed_updates", "package_lookups", "update_checks"):     # on/off switches
                 if key in b:
                     s[key] = bool(b[key])
@@ -366,6 +370,20 @@ def post_history_cancel(b):
     return {"ok": True}
 
 
+def get_github_repos(q):
+    """The repositories the GitHub login can see, to choose from in Settings (read-only, through github_check)."""
+    cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py")]
+    user = settings.load()["github_user"]
+    code, out = run(cmd + ([user] if user else []) + ["--list", "--json"], timeout=120, env=kit_env())
+    try:
+        data = json.loads(out.strip().splitlines()[-1]) if out.strip() else {}
+    except ValueError:
+        data = {}
+    if "repos" not in data:
+        raise ApiError(502, data.get("error") or "could not list your GitHub repositories")
+    return {"repos": data["repos"][:1000]}
+
+
 def get_update(q):
     return {"update": updates.status_now()}
 
@@ -392,7 +410,8 @@ def post_quit(b):
 
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
-              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update, "/api/history": get_history}
+              "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update, "/api/history": get_history,
+              "/api/github/repos": get_github_repos}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
                "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit,

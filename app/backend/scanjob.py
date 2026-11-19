@@ -76,7 +76,8 @@ def github_section(user, result, dismissed=(), repos=()):
 
 
 class ScanJob:
-    def __init__(self, mode, folders, github_user, github_repos=(), on_finish=None, update_feed=False):
+    def __init__(self, mode, folders, github_user, github_repos=(), on_finish=None, update_feed=False, owned_only=False):
+        self.owned_only = owned_only
         self.id = secrets.token_hex(6)
         self.mode, self.folders, self.github_user, self.github_repos = mode, list(folders), github_user, list(github_repos)
         self.started, self.finished = time.time(), None
@@ -137,7 +138,7 @@ class ScanJob:
 
     def _run_github(self):
         cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py")] + ([self.github_user] if self.github_user else [])
-        cmd += [a for r in self.github_repos for a in ("--repo", r)] + ["--json"]
+        cmd += [a for r in self.github_repos for a in ("--repo", r)] + ["--json"] + (["--owned-only"] if self.owned_only else [])
         p = self._start(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW,
                         env=dict(kit_env(), ARDVANE_PROGRESS="1"))
         if not p:

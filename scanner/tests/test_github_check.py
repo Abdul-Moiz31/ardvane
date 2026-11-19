@@ -304,7 +304,7 @@ class Repositories(unittest.TestCase):
 
     def test_listed_repositories_are_scanned_on_every_branch(self):
         repos = {"octo/clean": {"full_name": "octo/clean", "pushed_at": "2026-01-02T00:00:00Z", "size": 10, "default_branch": "main",
-                                "permissions": {"admin": False, "push": True}},
+                                "owner": {"login": "octo", "type": "User"}, "permissions": {"admin": False, "push": True}},
                  "Octo/Old": {"full_name": "Octo/Old", "pushed_at": "2026-01-01T00:00:00Z", "size": 10, "default_branch": "main"}}
         branches = {"octo/clean": [{"name": "main"}, {"name": "dev"}], "Octo/Old": [{"name": "main"}]}
 
@@ -341,6 +341,36 @@ class Repositories(unittest.TestCase):
 
 
 @unittest.skipIf(os.name == "nt", "uses a POSIX shell script as a stand-in for gh")
+class Scope(unittest.TestCase):
+    """Settings > GitHub: every repository you can push to, or only yours and your organizations'."""
+
+    def test_listing_follows_the_scope(self):
+        self.assertIn("affiliation=owner,organization_member,collaborator", gc.account_path("me", "me"))
+        self.assertIn("affiliation=owner,organization_member&", gc.account_path("me", "Me", owned_only=True))
+        self.assertEqual(gc.account_path("you", "me"), "/users/you/repos?type=owner&sort=full_name")
+
+    def test_repositories_to_choose_from_are_grouped(self):
+        rows = [{"full_name": "me/a", "owner": {"login": "me", "type": "User"}, "pushed_at": "2026-01-01T00:00:00Z"},
+                {"full_name": "Org/b", "owner": {"login": "Org", "type": "Organization"}, "private": True, "pushed_at": "2026-03-01T00:00:00Z"},
+                {"full_name": "pal/c", "owner": {"login": "pal", "type": "User"}, "pushed_at": "2026-02-01T00:00:00Z"},
+                "garbage"]
+
+        class FakeClient:
+            def __init__(self, use_gh):
+                pass
+
+            def get_all(self, path):
+                return rows
+        login, client = gc.gh_login, gc.Client
+        gc.gh_login, gc.Client = (lambda: "me"), FakeClient
+        try:
+            got = gc.list_repos()
+        finally:
+            gc.gh_login, gc.Client = login, client
+        self.assertEqual([(r["repo"], r["kind"], r["private"]) for r in got],
+                         [("Org/b", "org", True), ("pal/c", "shared", False), ("me/a", "yours", False)])   # newest push first
+
+
 class Download(unittest.TestCase):
     """download() through a fake `gh` that writes a given number of bytes, then exits with a given code."""
 

@@ -20,7 +20,11 @@ checks a package's reputation before you install it, and the daily check can fin
   pending collaborator invitations, and repositories a stolen token could force-push.
   The Scan page shows the GitHub check live: each repository as it's audited, each branch as it's scanned (with how much of a
   big repository is downloaded so far), and the result for each.
-  Repositories that aren't yours but you can push to are labelled "shared with you".
+  Repositories other people shared with you are labelled "shared with you".
+- **Choose which GitHub repositories are checked.** Settings > GitHub: every repository you can push to (the default -
+  the worm spreads through all of them), or only yours and your organizations'. **Choose from my GitHub
+  repositories** lists them all - yours, your organizations' and ones shared with you - to search and tick the ones
+  scanned on every branch, instead of typing their names.
 - **Package reputation before installing.** For the packages you name, safe install now also checks the npm registry
   or PyPI: a package created this week, a release by someone who never published the package before, or a name one
   typo away from a popular package (`raect`, `reqeusts`) make it ask before installing. A brand-new release of an

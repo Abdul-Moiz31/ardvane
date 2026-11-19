@@ -185,7 +185,6 @@ class Checking(unittest.TestCase):
             os.chdir(cwd)
 
 
-@unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "needs bash")
 class Reputation(Checking):
     """The packages you name: fresh versions, new packages, new publishers, lookalike names, install scripts."""
 
@@ -257,6 +256,7 @@ class Reputation(Checking):
         self.assertEqual(si.lookalike("my-company-utils", "npm"), None)
 
 
+@unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "needs bash")
 class ShellFunctions(unittest.TestCase):
     """scanner/shell/safe-install.sh with stand-ins for the checker and the package manager."""
 

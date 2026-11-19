@@ -106,11 +106,69 @@ function github() {
       h('li', { text: 'Warns when many repositories were pushed within one hour.' }),
       h('li', { text: 'Downloads the main branch of each recently pushed repository into a temporary folder, scans it and deletes it. Nothing is ever run.' })),
     h('div', { class: 'field' }, h('label', { text: 'Username' }), h('div', { class: 'row' }, user, saveBtn)), err,
+    githubScope(),
     h('div', { class: 'divider' }),
     githubRepos(),
     banner('neutral', s.gh ? 'checkCircle' : 'info', s.gh ? 'GitHub CLI found' : 'Public repositories only',
       s.gh ? 'If you\'re logged in with `gh auth login`, private repositories are checked too. Your token stays inside the GitHub CLI; this app never sees it.'
         : 'To include private repositories, install the GitHub CLI and run `gh auth login`. This app never asks for or stores a password or token.')), toggle);
+}
+
+const SCOPES = [
+  ['all', 'Every repository I can push to', 'Yours, your organizations\' and ones shared with you. The worm spreads through all of them.', true],
+  ['owned', 'Mine and my organizations\'', 'Skips repositories other people shared with you, even if you can push to them.', false]];
+
+function githubScope() {
+  const current = S.data.settings.github_scope || 'all';
+  const pick = (/** @type {string} */ m) => async () => {
+    try { await api('/api/settings', { github_scope: m }); await refresh(); toast(m === 'owned' ? 'Your and your organizations\' repositories will be checked' : 'Every repository you can push to will be checked'); }
+    catch (e) { showError(e); }
+  };
+  return h('div', { class: 'field' }, h('label', { text: 'Which repositories' }),
+    h('div', { class: 'choices' }, SCOPES.map(([m, title, desc, rec]) => choice('radio', current === m, String(title), String(desc), pick(String(m)), false, !!rec))));
+}
+
+/** Choose repositories from the GitHub login's list instead of typing their names. */
+function repoPicker() {
+  const P = S.ghPick, chosen = new Set(S.data.settings.github_repos.map((/** @type {string} */ r) => r.toLowerCase()));
+  const load = async () => {
+    P.open = true; P.loading = true; P.err = ''; rerender();
+    try { P.repos = (await api('/api/github/repos')).repos; } catch (e) { P.err = errorText(e); }
+    P.loading = false; rerender();
+  };
+  if (!P.open) return button('Choose from my GitHub repositories', load, '', 'github');
+  if (P.loading) return h('div', { class: 'row help' }, h('div', { class: 'loading-spinner' }), 'Listing your repositories…');
+  if (P.err || !P.repos) return h('div', { class: 'stack' }, h('div', { class: 'err', role: 'alert', text: P.err || 'Could not list your repositories.' }), button('Try again', load, 'btn-sm', 'refresh'));
+  const repos = /** @type {any[]} */ (P.repos);
+  const list = h('div', { class: 'list pick-list' });
+  const fill = () => {
+    const q = P.q.trim().toLowerCase();
+    const shown = (/** @type {any} */ r) => P.filter === 'all' ? true : P.filter === 'chosen' ? chosen.has(r.repo.toLowerCase()) : r.kind === P.filter;
+    const rows = repos.filter(r => shown(r) && (!q || r.repo.toLowerCase().includes(q)));
+    list.replaceChildren(...(rows.length ? rows.slice(0, 200).map(r => {
+      const on = chosen.has(r.repo.toLowerCase());
+      return h('label', { class: 'list-row pick-row' + (on ? ' on' : '') },
+        h('input', { type: 'checkbox', checked: on, onchange: async () => {
+          S.repoErr = await changeList('github_repos', on ? { remove: S.data.settings.github_repos.find((/** @type {string} */ x) => x.toLowerCase() === r.repo.toLowerCase()) } : { add: r.repo },
+            on ? `Stopped scanning ${r.repo}` : `${r.repo} will be scanned on every branch`);
+          rerender();
+        } }),
+        h('div', { class: 'grow' }, h('div', { class: 'title mono', text: r.repo }),
+          h('div', { class: 'desc', text: ({ yours: 'yours', org: `${r.owner} organization`, shared: `shared with you by ${r.owner}` }[/** @type {'yours'|'org'|'shared'} */ (r.kind)] || r.owner)
+            + (r.private ? ' · private' : '') + (r.pushed_at ? ` · pushed ${String(r.pushed_at).slice(0, 10)}` : '') })),
+        r.kind === 'shared' ? pill('warn', 'Shared') : r.kind === 'org' ? pill('neutral', 'Organization') : null);
+    }) : [h('p', { class: 'help card-pad', text: 'No repositories match.' })]));
+  };
+  const search = /** @type {HTMLInputElement} */ (h('input', { type: 'text', class: 'grow', value: P.q, placeholder: `Search ${repos.length} repositories`, 'aria-label': 'Search repositories', autocomplete: 'off', spellcheck: 'false' }));
+  search.addEventListener('input', () => { P.q = search.value; fill(); });
+  const counts = { all: repos.length, chosen: chosen.size, yours: 0, org: 0, shared: 0 };
+  repos.forEach(r => { counts[/** @type {'yours'|'org'|'shared'} */ (r.kind)] += 1; });
+  const tabs = h('div', { class: 'tabs', role: 'tablist' }, [['all', 'All'], ['yours', 'Yours'], ['org', 'Organizations'], ['shared', 'Shared with you'], ['chosen', 'Chosen']].map(([k, label]) =>
+    h('button', { type: 'button', role: 'tab', class: P.filter === k ? 'on' : '', 'aria-selected': String(P.filter === k),
+      onclick: () => { P.filter = k; rerender(); } }, `${label} ${counts[/** @type {'all'|'yours'|'org'|'shared'|'chosen'} */ (k)]}`)));
+  fill();
+  return h('div', { class: 'stack' }, h('div', { class: 'row wrap' }, tabs, h('span', { class: 'grow' }), button('Done', () => { P.open = false; rerender(); }, 'btn-sm')),
+    search, list);
 }
 
 function githubRepos() {
@@ -125,6 +183,7 @@ function githubRepos() {
       h('div', { class: 'help', text: 'Every branch of these repositories is checked with each scan and daily check: yours, your organization\'s or a teammate\'s - any repository your GitHub login can read. Works without a username too.' })),
     s.github_repos.length ? chipList(s.github_repos, 'github', r => save({ remove: r })) : null,
     h('div', { class: 'row' }, input, button('Add', add, '', 'plus')),
+    repoPicker(),
     S.repoErr ? h('div', { class: 'err', role: 'alert', text: S.repoErr }) : null);
 }
 
