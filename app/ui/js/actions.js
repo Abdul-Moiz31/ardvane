@@ -112,10 +112,11 @@ export function pollScan() {
 }
 
 /** @param {string} [mode] 'full' | 'quick' */
-export async function startScan(mode) {
+/** @param {string} [mode] @param {string[]} [only] scan just these folders (full scan) */
+export async function startScan(mode, only) {
   const o = S.scanOpts, set = S.data.settings;
-  const folders = o.where === 'folders' && (mode || o.mode) === 'full'
-    ? set.folders.map(/** @param {string} f */ f => f.replace(/^~(?=$|[\\/])/, S.data.home)) : [];
+  const home = (/** @type {string} */ f) => f.replace(/^~(?=$|[\\/])/, S.data.home);
+  const folders = only ? only.map(home) : o.where === 'folders' && (mode || o.mode) === 'full' ? set.folders.map(home) : [];
   try {
     const r = await api('/api/scan', { mode: mode || o.mode, folders, github: !!(o.github && (set.github_user || set.github_repos.length)) });
     S.scan = r.scan;

@@ -87,6 +87,38 @@ class Reports(unittest.TestCase):
             self.assertIsNone(reports.read(bad), bad)
 
 
+class BlockedFolders(unittest.TestCase):
+    """Folders the daily check couldn't open are offered for a scan from the dashboard, until a newer scan covers them."""
+
+    def setUp(self):
+        shutil.rmtree(config.REPORTS, ignore_errors=True)
+        os.makedirs(config.SCANS, exist_ok=True)
+        os.makedirs(os.path.join(SANDBOX, "Documents"), exist_ok=True)
+
+    def daily(self, text, when):
+        p = os.path.join(config.REPORTS, "2026-02-01.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("VERDICT: Clean, 2 item(s) worth a look\n\n" + text)
+        os.utime(p, (when, when))
+
+    def test_folders_named_in_the_newest_daily_check(self):
+        self.daily("  ⚠️  can't read ~/Documents — macOS keeps background checks out\n"
+                   "  ⚠️  can't read ~/Gone — macOS keeps background checks out\n", 2_000_000_000)
+        self.assertEqual(reports.blocked_folders(), ["~/Documents"])           # a folder that no longer exists is left out
+
+    def test_a_newer_scan_covers_them(self):
+        self.daily("  ⚠️  can't read ~/Documents — x\n", 2_000_000_000)
+        p = os.path.join(config.SCANS, "scan-report-2026-02-02-0900.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("RESULT: CLEAN\n")
+        os.utime(p, (2_000_000_100, 2_000_000_100))
+        self.assertEqual(reports.blocked_folders(), [])
+
+    def test_older_wording_is_understood_too(self):
+        self.daily("  ⚠️  can't read ~/Documents — give /bin/bash Full Disk Access\n", 2_000_000_000)
+        self.assertEqual(reports.blocked_folders(), ["~/Documents"])
+
+
 class Settings(unittest.TestCase):
     def test_github_usernames(self):
         self.assertEqual(settings.clean_github_user(" @Abdul-Moiz31 "), "Abdul-Moiz31")
@@ -244,6 +276,37 @@ class Tasks(unittest.TestCase):
         v = self.view(data, tid)
         self.assertEqual(v["status"], "open")
         self.assertIn("still found it", v["reopened"])
+
+    def test_state_warning_closes_itself_when_a_newer_daily_check_no_longer_finds_it(self):
+        w = tasks.finding("warn", "can't read ~/Documents — give it access", seen=self.now, source="daily")
+        tid = "f-" + w["key"]
+        tasks.sync([w], self.PROTECTION_OFF, set(), now=self.now, checked={"daily": self.now})
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now, checked={"daily": self.now})      # same report: stays
+        self.assertIsNone(data["tasks"][tid]["done_at"])
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now + 10, checked={"daily": self.now + 5})
+        self.assertEqual(data["tasks"][tid]["resolution"], "gone")
+        data = tasks.sync([dict(w, seen=self.now + 20)], self.PROTECTION_OFF, set(), now=self.now + 20, checked={"daily": self.now + 20})
+        self.assertIsNone(data["tasks"][tid]["done_at"])                                                       # it came back
+        self.assertIn("found this again", data["tasks"][tid]["reopened"])
+
+    def test_event_warnings_dangers_and_scan_findings_never_close_themselves(self):
+        keep = [tasks.finding("warn", "new/changed startup item: /Library/LaunchAgents/x.plist", seen=self.now, source="daily"),
+                tasks.finding("warn", "~/.zshrc changed — check it contains nothing you didn't add", seen=self.now, source="daily"),
+                tasks.finding("danger", "found: ~/.n2", seen=self.now, source="daily"),
+                tasks.finding("warn", "worth a look: ~/code/x", seen=self.now, source="scan")]       # a quick scan skips projects
+        tasks.sync(keep, self.PROTECTION_OFF, set(), now=self.now, checked={"daily": self.now, "scan": self.now})
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now + 99, checked={"daily": self.now + 50, "scan": self.now + 50})
+        self.assertTrue(all(not data["tasks"]["f-" + f["key"]]["done_at"] for f in keep))
+
+    def test_older_tasks_without_a_source_need_both_report_kinds_to_be_newer(self):
+        w = tasks.finding("warn", "scanned 0 repositories — nothing was checked", seen=self.now)
+        w.pop("source")
+        tid = "f-" + w["key"]
+        tasks.sync([w], self.PROTECTION_OFF, set(), now=self.now)
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now + 9, checked={"daily": self.now + 5, "scan": self.now - 5})
+        self.assertIsNone(data["tasks"][tid]["done_at"])
+        data = tasks.sync([], self.PROTECTION_OFF, set(), now=self.now + 9, checked={"daily": self.now + 5, "scan": self.now + 5})
+        self.assertEqual(data["tasks"][tid]["resolution"], "gone")
 
     def test_hidden_warning_closes_its_task_and_creates_none(self):
         w = tasks.finding("warn", "editor extension installed/updated in last 24h: x.y", seen=self.now)

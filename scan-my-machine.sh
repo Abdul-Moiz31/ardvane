@@ -16,6 +16,7 @@ set -u
 KIT="$(cd "$(dirname "$0")" && pwd)"
 CHECKREPO="$KIT/scanner/checkrepo.py"
 PKGCHECK="$KIT/scanner/check-my-projects.py"
+HOSTCHECK="$KIT/scanner/hostcheck.py"
 QUICK=0; ROOTS=()
 for a in "$@"; do case "$a" in
   --quick) QUICK=1 ;; -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -50,6 +51,14 @@ say "${B}Ardvane — machine scan${X}  ${D}$(date '+%Y-%m-%d %H:%M') · read-onl
 [ -n "$PY" ] || say "${Y}Python 3.8+ not found — project and package scans will be skipped (macOS: brew install python)${X}"
 
 # ------------------------------------------------------------------ 1. known malware locations
+# machine checks shared with the daily check (malware list, worm persistence, AI-agent configs, extensions)
+HOST=""; [ -n "$PY" ] && [ -f "$HOSTCHECK" ] && HOST="$("$PY" "$HOSTCHECK" 2>/dev/null)"
+host() {  # host GROUP: report hostcheck's findings for one section
+  while IFS=$'\t' read -r lvl text path group; do
+    [ "$group" = "$1" ] || continue
+    case "$lvl" in D) bad "$text" "$path" ;; W) chk "$text" "$path" ;; I) info "$text" ;; esac
+  done <<< "$HOST"
+}
 head1 "1. Known malware locations"
 n=$danger
 for p in "$HOME/Library/Application Support/VSCodeUpdater" "$HOME/.node_modules" "$HOME/.n2" "$HOME/.n3" "$HOME/.npl" "$HOME/.pyp" \
@@ -57,8 +66,9 @@ for p in "$HOME/Library/Application Support/VSCodeUpdater" "$HOME/.node_modules"
          "$HOME/.pcl-state" "$HOME/Library/LaunchAgents/com.launchkeeper.MicrosoftSystem64.plist" "$HOME/Library/LaunchAgents/com.bablu.helper.plist" \
          "$HOME/Library/LaunchAgents/com.avatar.update.wake.plist" "$HOME/.config/systemd/user/MicrosoftSystem64.service" \
          "$HOME/.config/autostart/MicrosoftSystem64.desktop" /tmp/0001.dat /tmp/tmp7A863DD1.tmp; do
-  [ -e "$p" ] && bad "found: ${p/#$HOME/~}" "$p"
+  [ -z "$HOST" ] && [ -e "$p" ] && bad "found: ${p/#$HOME/~}" "$p"     # without Python; hostcheck reads the full list
 done
+host malware
 # loose scripts dropped into Application Support (the dropper hid in a folder with an innocent name)
 if [ -d "$HOME/Library/Application Support" ] && [ -n "$PY" ]; then
   while IFS= read -r f; do
@@ -80,7 +90,7 @@ head1 "2. Running processes"
 n=$danger; nw=$warn
 plist="$(ps -axo pid=,args= 2>/dev/null | grep -v -e "scan-my-machine" -e "grep")"
 while IFS= read -r l; do [ -n "$l" ] && bad "process: ${l:0:150}"; done < <(printf '%s\n' "$plist" | grep -E \
-  "MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|VSCodeUpdater|/\.node_modules/|/\.n[23]/|/\.npl|node [^ ]*\.(eot|woff2?|ttf|otf|llf)( |$)")
+  "MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|VSCodeUpdater|/\.node_modules/|/\.n[23]/|/\.npl|node [^ ]*\.(eot|woff2?|ttf|otf|llf)( |$)|gh-token-monitor|kitty-monitor|bun_environment\.js|tanstack_runner\.js|router_runtime\.js")
 while IFS= read -r l; do [ -n "$l" ] && chk "inline node process fetching/decoding code: ${l:0:150}"; done < <(printf '%s\n' "$plist" | grep -E "node -e " | grep -E "https?://|eval|base64|Buffer\.from|atob")
 [ $danger -eq $n ] && [ $warn -eq $nw ] && okay "nothing suspicious"
 
@@ -128,6 +138,7 @@ for f in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" 
   hit="$(grep -nE 'curl[^|#]*\|[[:space:]]*(ba|z)?sh|wget[^|#]*\|[[:space:]]*(ba|z)?sh|base64 (-d|--decode)|node -e|python3? -c|eval "\$\((curl|wget)' "$f" | head -1)"
   [ -n "$hit" ] && chk "${f/#$HOME/~} line ${hit%%:*} runs downloaded/encoded code — check you added it: ${hit#*:}" "$f"
 done
+host shell
 extra="$(grep -vE '^[[:space:]]*(#|$)|localhost|broadcasthost|ip6-|::1' /etc/hosts 2>/dev/null)"
 [ -n "$extra" ] && chk "/etc/hosts has custom entries (fine if you added them): $(echo "$extra" | head -3 | tr '\n' ' ')"
 [ $danger -eq $n ] && [ $warn -eq $nw ] && okay "nothing suspicious"
@@ -156,6 +167,7 @@ for e in "$HOME/.vscode/extensions" "$HOME/.cursor/extensions" "$HOME/.windsurf/
   recent=$(find "$e" -maxdepth 1 -mindepth 1 -type d -mtime -14 2>/dev/null | sed 's#.*/##' | tr '\n' ' ')
   info "$(basename "$(dirname "$e")") extensions: $total installed${recent:+; added/updated in the last 14 days: $recent}"
 done
+host editors
 [ $danger -eq $n ] && [ $warn -eq $nw ] && okay "safe settings"
 
 # ------------------------------------------------------------------ 7. projects

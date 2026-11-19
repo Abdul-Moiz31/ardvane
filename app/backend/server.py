@@ -62,12 +62,13 @@ def current_findings():
     job = App.job
     if job and job.finished and not job.cancelled:
         for sec in job.state()["sections"]:
-            found += [tasks.finding(i["level"], i["text"], i["path"], job.finished) for i in sec["items"]]
+            found += [tasks.finding(i["level"], i["text"], i["path"], job.finished, "scan") for i in sec["items"]]
     return found
 
 
 def task_list(protection=None):
-    data = tasks.sync(current_findings(), protection or status.protection(), set(settings.load()["dismissed"]))
+    data = tasks.sync(current_findings(), protection or status.protection(), set(settings.load()["dismissed"]),
+                      checked=tasks.latest_checks())
     return tasks.overview(data)
 
 
@@ -77,6 +78,7 @@ def get_state(q):
     protection = status.protection()
     return {"app": APP_NAME, "version": VERSION, "os": OS_NAME, "kit": KIT, "home": HOME,
             "protection": protection, "last_daily": reports.latest_daily(), "todo": task_list(protection)["counts"],
+            "blocked_folders": reports.blocked_folders(),
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
                          "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
                          "package_lookups": s["package_lookups"], "folders": folders,
