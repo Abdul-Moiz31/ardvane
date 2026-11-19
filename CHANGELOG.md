@@ -3,6 +3,21 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.6.0
+
+**Ardvane can now clean up what it finds, on its own if you let it.**
+
+- **New fix mode: "Automatic: remove malware too"** (Settings → Fixes). As soon as a scan or the daily check finds
+  malware, Ardvane stops malware processes, quarantines malware files, loose scripts and malicious editor extensions,
+  removes the shutdown line malware adds to shell start-up files, and cleans infected projects.
+- **Infected projects are cleaned, not moved away.** Only the malicious parts go: the code hidden after spaces in a
+  build config, fake fonts and payload files, the worm's `.gitignore` lines and install scripts, invisible instructions in
+  AI-agent files, malicious tasks, hooks and workflows. Your own code, settings and dependencies stay exactly as they
+  were. The same cleanups are offered as **Fix…** buttons in "Ask me" mode.
+- **Nothing is deleted, everything can be undone.** Quarantined files and the original of every edited file are kept
+  in `~/.checkrepo/quarantine`, and each fix is checked afterwards. Moving a whole project, anything on GitHub and
+  rotating secrets still wait for you.
+
 ## 0.5.0
 
 **Ardvane now finds the 2025–2026 worms on the computer itself, and removes their wipers safely.**

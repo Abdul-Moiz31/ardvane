@@ -13,7 +13,7 @@ import { S, rerender, refresh, loadOnce } from './store.js';
  *   verified: boolean, undoable: boolean, undone_at: number|null, error?: string}} FixEntry
  */
 
-const MALWARE_KINDS = ['quarantine', 'process'];
+const MALWARE_KINDS = ['quarantine', 'process', 'clean-file'];
 const STOLEN_NOTE = 'The malware is gone from this computer, but anything it stole before is still stolen. Keep going with the recovery checklist in your to-do list.';
 
 export function loadFixes() {

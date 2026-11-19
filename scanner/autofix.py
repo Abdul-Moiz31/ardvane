@@ -13,13 +13,17 @@ Safety rules
     scanned file, a symlink is moved as a link (never followed), and protected folders (~/.ssh, keychains, the home
     folder itself, …) are refused.
   * Each fix is checked afterwards: the problem must no longer be detected.
-  * "Automatic" only applies fixes marked auto-safe, and only when Settings → Automatic fixes is set to "Automatic".
-    Stopping processes and moving projects or loose scripts always need a person to confirm.
+  * "Automatic" only applies fixes marked auto-safe (the kit's own settings and known malware locations).
+    "Automatic, including malware" also removes everything this tool finds that can be undone - malware files and
+    folders, malicious editor extensions, the code malware injected into project files - and stops malware processes.
+    Moving a whole project is never automatic. Both modes run only when the user chose them in Settings.
+  * Inside a project, only the parts checkrepo flags right now are touched: an injected line is cut out, a malware
+    file is quarantined, a worm's install script is removed. The original file is kept in quarantine for undo.
 
 Usage
   autofix.py list [--json]                 what can be fixed right now
   autofix.py fix ID [--project DIR] [--json]   apply one fix (as a person, from the dashboard or terminal)
-  autofix.py auto [--json]                 apply every auto-safe fix (used by the daily check in Automatic mode)
+  autofix.py auto [--project DIR ...] [--json]   apply the fixes the chosen mode allows (used by the daily check)
   autofix.py undo HISTORY_ID [--json]      undo a fix
   autofix.py history [--json]
 Exit code: 0 ok, 1 a fix failed, 3 usage error / refused.
@@ -41,7 +45,7 @@ from kitlib import DEST, HOME, IS_MAC, IS_WIN, find, load_checkrepo, read_json, 
 
 QUARANTINE = os.path.join(DEST, "quarantine")
 HISTORY = os.path.join(DEST, "fixes.json")
-MODES = ("ask", "auto", "off")
+MODES = ("ask", "auto", "all", "off")
 DEFAULT_MODE = "ask"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -53,7 +57,8 @@ PROTECTED = [HOME, DEST, os.path.join(HOME, ".ssh"), os.path.join(HOME, ".gnupg"
 # Exact file names that only the malware uses (searched 2 levels deep in these folders)
 MALWARE_NAMES = {"SvcHostUpdate.py", "SvcHostUpdate.js", "MicrosoftCLROptimization.vbs", "MicrosoftSystem64.exe"}
 NAME_ROOTS = ([os.environ.get(v, "") for v in ("TEMP", "APPDATA", "LOCALAPPDATA")] if IS_WIN else [])
-PROCESS_RE = re.compile(r"MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|node(?:\.exe)?\"?\s+\S*\.(?:eot|woff2?|ttf|otf|llf)(?:\s|$)", re.I)
+PROCESS_RE = re.compile(r"MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|node(?:\.exe)?\"?\s+\S*\.(?:eot|woff2?|ttf|otf|llf)(?:\s|$)"
+                        r"|gh-token-monitor|kitty-monitor|bun_environment\.js|tanstack_runner\.js|router_runtime\.js", re.I)
 # A command whose program is one of these only mentions a malware name (someone searching or reading), it isn't malware
 TEXT_TOOLS = {"grep", "egrep", "rg", "ag", "ack", "less", "more", "cat", "head", "tail", "vi", "vim", "nvim", "nano", "emacs", "code", "find", "findstr", "select-string"}
 EDITORS = ("Code", "Cursor", "Windsurf")
@@ -76,9 +81,10 @@ def pretty(path):
     return "~" + path[len(HOME):] if path.startswith(HOME + os.sep) else path
 
 
-def fix(fid, kind, title, detail, auto, target="", changes=(), undo=True):
+def fix(fid, kind, title, detail, auto, target="", changes=(), undo=True, clean=None, how=""):
+    """auto: safe enough for "Automatic". clean: removes malware, so it runs in "Automatic, including malware"."""
     return {"id": fid, "kind": kind, "title": title, "detail": detail, "auto": auto, "target": target,
-            "changes": list(changes), "undoable": undo}
+            "changes": list(changes), "undoable": undo, "clean": auto if clean is None else clean, "how": how}
 
 
 # ---------------------------------------------------------------------------------------------- safety
@@ -210,7 +216,7 @@ def detect_paths():
         if os.path.lexists(path):
             out.append(fix("path:" + short(path), "quarantine", f"Quarantine {pretty(path)}", "A known location of this malware.", auto, path,
                            [f"move {pretty(path)} to ~/.checkrepo/quarantine (not deleted, can be restored)"]
-                           + (["stop it from starting automatically"] if path.endswith((".plist", ".service", ".desktop")) else [])))
+                           + (["stop it from starting automatically"] if path.endswith((".plist", ".service", ".desktop")) else []), clean=True))
     for root in NAME_ROOTS:
         if not root or not os.path.isdir(root):
             continue
@@ -222,7 +228,7 @@ def detect_paths():
                 if fn in MALWARE_NAMES:
                     p = os.path.join(dp, fn)
                     out.append(fix("path:" + short(p), "quarantine", f"Quarantine {p}", "A file name only this malware uses.", False, p,
-                                   [f"move {p} to quarantine (not deleted, can be restored)"]))
+                                   [f"move {p} to quarantine (not deleted, can be restored)"], clean=True))
     return out
 
 
@@ -257,7 +263,7 @@ def detect_scripts():
             if cr.marker_hits(text) or cr.looks_obfuscated(text):
                 out.append(fix("path:" + short(e.path), "quarantine", f"Quarantine {pretty(e.path)}",
                                "A script with this malware's code, hidden among app files.", False, e.path,
-                               [f"move {pretty(e.path)} to quarantine (not deleted, can be restored)"]))
+                               [f"move {pretty(e.path)} to quarantine (not deleted, can be restored)"], clean=True))
     return out
 
 
@@ -281,7 +287,7 @@ def detect_processes(processes=None):
         if pid in me or pid <= 1 or "autofix" in cmd or program in TEXT_TOOLS or not PROCESS_RE.search(cmd):
             continue
         out.append(fix(f"process:{pid}:{short(cmd)}", "process", f"Stop malware process {pid}", cmd[:160], False, str(pid),
-                       [f"stop process {pid}: {cmd[:120]}"], undo=False))
+                       [f"stop process {pid}: {cmd[:120]}"], undo=False, clean=True))
     return out
 
 
@@ -307,8 +313,95 @@ def detect_projects(folders):
     return out
 
 
+# What checkrepo found, and how to remove just that part. Files only malware writes are quarantined whole; files that are
+# also yours (a build config, .gitignore, package.json, an AI instructions file) get only the malicious part cut out.
+QUARANTINE_RULES = {"fake-font", "disguised-payload", "worm-file", "implant-file", "worm-script", "known-payload", "hex-dropper",
+                    "autorun-payload", "pth-autorun", "git-hook", "vscode-autorun", "vscode-settings", "ai-agent-config",
+                    "campaign-marker", "invisible-code", "remote-code", "image-payload", "workflow", "devcontainer", "ai-cli-abuse"}
+NEVER_QUARANTINE = {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", ".gitignore"}
+CUT = {"hidden-code": "hidden", "gitignore-worm": "gitignore", "install-script": "scripts", "worm-loader": "scripts",
+       "ai-cli-abuse": "scripts", "ai-instructions": "invisible", "campaign-marker": None}
+
+
+def _inside_project(project, rel):
+    """The real path of `rel` inside `project`, or None (a link out of the project, a folder, gone)."""
+    full = os.path.join(project, *rel.split("/"))
+    real = os.path.realpath(full)
+    if os.path.islink(full) or not os.path.isfile(real) or not _inside(real, os.path.realpath(project)):
+        return None
+    return full
+
+
+def detect_project_cleanups(folders):
+    """For each project checkrepo flags as DANGER: one fix per malicious file, removing only what is malicious."""
+    if not folders:
+        return []
+    cr, out = load_checkrepo(), []
+    for folder in folders:
+        root = os.path.abspath(os.path.expanduser(folder))
+        if not os.path.isdir(root):
+            continue
+        s = cr.Scan(root)
+        s.walk()
+        for sev, rule, rel, detail in s.findings:
+            if sev != "DANGER":
+                continue
+            path = _inside_project(root, rel)
+            if not path:
+                continue
+            name = os.path.basename(path).lower()
+            cut = CUT.get(rule)
+            where = pretty(path)
+            if rule == "campaign-marker":     # a config file with the payload appended: cut it out if that leaves it clean
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as fh:
+                        text = fh.read()
+                    left = _cut(text, "hidden", cr)
+                    cut = "hidden" if left != text and not cr.marker_hits(left) else None
+                except OSError:
+                    cut = None
+            if cut and (rule != "ai-cli-abuse" or name == "package.json"):
+                titles = {"hidden": f"Cut the hidden code out of {where}", "gitignore": f"Remove the worm's lines from {where}",
+                          "scripts": f"Remove the malicious install script from {where}",
+                          "invisible": f"Remove the hidden instructions from {where}"}
+                out.append(fix(f"clean:{short(path + rule)}", "clean-file", titles[cut], detail, False, path,
+                               [f"edit {where}: remove only the malicious part", "the original is kept in quarantine (undo restores it)"],
+                               clean=True, how=cut))
+            elif rule in QUARANTINE_RULES and name not in NEVER_QUARANTINE:
+                out.append(fix(f"clean:{short(path + rule)}", "quarantine", f"Quarantine {where}", detail, False, path,
+                               [f"move {where} to quarantine (not deleted, can be restored)"], clean=True))
+    return out
+
+
+def detect_machine_cleanups():
+    """Malware hostcheck finds outside the known-path list: sabotage lines in shell files, malicious extensions."""
+    if IS_WIN:
+        return []
+    script = find("hostcheck.py")
+    if not script:
+        return []
+    spec = __import__("importlib.util").util.spec_from_file_location("hostcheck", script)
+    hc = __import__("importlib.util").util.module_from_spec(spec)
+    spec.loader.exec_module(hc)
+    out, cr = [], load_checkrepo()
+    found = []
+    hc.check_shell_files(found)
+    for lvl, text, path in found:
+        out.append(fix("clean:" + short(path + "sabotage"), "clean-file", f"Remove the shutdown line from {pretty(path)}", text, False, path,
+                       [f"edit {pretty(path)}: delete the shutdown / wipe line", "the original is kept in quarantine (undo restores it)"],
+                       clean=True, how="sabotage"))
+    found = []
+    hc.check_extensions(cr, found)
+    for lvl, text, path in found:
+        if lvl == "D" and path:
+            out.append(fix("path:" + short(path), "quarantine", f"Remove the malicious editor extension {os.path.basename(path)}", text, False, path,
+                           [f"move {pretty(path)} to quarantine - the editor no longer loads it"], clean=True))
+    return out
+
+
 def detect(projects=()):
-    found = detect_editors() + detect_npm() + detect_hooks() + detect_paths() + detect_scripts() + detect_processes() + detect_projects(projects)
+    found = (detect_processes() + detect_editors() + detect_npm() + detect_hooks() + detect_paths() + detect_scripts()
+             + detect_machine_cleanups() + detect_project_cleanups(projects) + detect_projects(projects))
     seen, out = set(), []
     for f in found:
         if f["id"] not in seen:
@@ -404,6 +497,8 @@ def _apply(f, projects):
         return {"before": before}
     if kind == "quarantine":
         return quarantine(f["target"], f["title"])
+    if kind == "clean-file":
+        return clean_file(f["target"], f["how"], f["title"])
     if kind == "process":
         pid = int(f["target"])
         if IS_WIN:
@@ -424,6 +519,54 @@ def _apply(f, projects):
     raise ValueError("unknown fix")
 
 
+def _cut(text, how, cr):
+    """`text` with the malicious part removed (the same patterns checkrepo / hostcheck detect)."""
+    if how == "hidden":
+        def drop(m):
+            code = m.group(2)
+            return "" if (cr.HIDDEN_CODE_RE.match(code) or (len(m.group(1)) >= cr.HIDDEN_CONFIG_SPACES and len(code) >= cr.HIDDEN_CONFIG_CODE)) else m.group(0)
+        return cr.HIDDEN_RE.sub(drop, text)
+    if how == "gitignore":
+        return "".join(l for l in text.splitlines(True) if not re.fullmatch(r"\s*/?(?:temp_auto_push|temp_interactive_push)\.bat\s*", l))
+    if how == "invisible":
+        return re.sub("[\U000e0000-\U000e007f\ufe00-\ufe0f\U000e0100-\U000e01ef]", "", text)
+    if how == "sabotage":
+        return "".join(l for l in text.splitlines(True) if not re.match(r"\s*(?:sudo\s+)?(?:shutdown\s+-h\s+(?:0|now)\b|rm\s+-rf\s+(?:~|\$HOME)/?\s*$)", l))
+    if how == "scripts":
+        j = json.loads(text)
+        scripts = j.get("scripts") if isinstance(j, dict) else None
+        if not isinstance(scripts, dict):
+            return text
+        bad = [k for k in cr.AUTO_SCRIPTS if isinstance(scripts.get(k), str)
+               and (cr.WORM_LOADER_RE.search(scripts[k]) or cr.AI_YOLO_RE.search(scripts[k]) or cr.LIFECYCLE_DANGER_RE.search(scripts[k]))]
+        for k in bad:
+            del scripts[k]
+        indent = re.match(r"\{\s*\n([ \t]+)", text)
+        return json.dumps(j, indent=indent.group(1) if indent else 2, ensure_ascii=False) + ("\n" if text.endswith("\n") else "")
+    raise ValueError("unknown cleanup")
+
+
+def clean_file(path, how, reason):
+    """Cut the malicious part out of a file. The original goes to quarantine first, so undo can put it back."""
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise ValueError(f"{pretty(path)} is not a regular file any more")
+    with open(path, encoding="utf-8", errors="surrogateescape", newline="") as fh:
+        text = fh.read()
+    new = _cut(text, how, load_checkrepo())
+    if new == text:
+        raise ValueError(f"nothing left to remove in {pretty(path)}")
+    folder = os.path.join(QUARANTINE, time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3))
+    os.makedirs(folder, mode=0o700)
+    backup = os.path.join(folder, "item")
+    shutil.copy2(path, backup)
+    os.chmod(backup, 0o600)
+    write_json(os.path.join(folder, "manifest.json"), {"original": path, "reason": reason, "time": time.time(), "edited": True,
+                                                       "sha256": hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()})
+    with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as fh:
+        fh.write(new)
+    return {"backup": backup, "path": path, "folder": folder}
+
+
 def _history():
     return read_json(HISTORY, [])
 
@@ -442,6 +585,8 @@ def apply(fix_id, how="manual", projects=()):
         raise LookupError("nothing to fix — it's already fixed or no longer found")
     if how == "auto" and not f["auto"]:
         raise PermissionError("this fix always needs a person to confirm it")
+    if how == "auto-all" and not (f["auto"] or f["clean"]):
+        raise PermissionError("this fix always needs a person to confirm it")
     entry = {"id": secrets.token_hex(6), "fix": f["id"], "kind": f["kind"], "title": f["title"], "target": f["target"],
              "how": how, "time": time.time(), "ok": False, "verified": False, "undoable": f["undoable"], "undone_at": None}
     try:
@@ -454,11 +599,22 @@ def apply(fix_id, how="manual", projects=()):
     return entry
 
 
-def apply_auto():
-    """Every auto-safe fix, only when the user chose Automatic in Settings."""
-    if setting("autofix", DEFAULT_MODE) != "auto":
-        raise PermissionError("automatic fixes are not turned on (Settings → Automatic fixes)")
-    return [apply(f["id"], "auto") for f in detect() if f["auto"]]
+def apply_auto(projects=()):
+    """What the mode chosen in Settings allows: "auto" = the auto-safe fixes, "all" = also every malware removal
+    (malware processes first, so nothing restarts what is being removed)."""
+    mode = setting("autofix", DEFAULT_MODE)
+    if mode not in ("auto", "all"):
+        raise PermissionError("automatic fixes are not turned on (Settings → Fixes)")
+    how = "auto-all" if mode == "all" else "auto"
+    todo = [f for f in detect(projects) if f["auto"] or (mode == "all" and f["clean"])]
+    todo.sort(key=lambda f: f["kind"] != "process")
+    done = []
+    for f in todo:
+        try:
+            done.append(apply(f["id"], how, projects))
+        except LookupError:              # an earlier fix already removed it (e.g. the same file found twice)
+            continue
+    return done
 
 
 def undo(entry_id):
@@ -478,6 +634,8 @@ def undo(entry_id):
             except OSError:
                 pass
         shutil.move(item, u["original"])
+    elif kind == "clean-file":
+        shutil.copy2(u["backup"], u["path"])
     elif kind == "editor":
         if u.get("backup"):
             shutil.copy2(u["backup"], u["path"])
@@ -525,7 +683,7 @@ def main(argv):
                 print(("🔧 " + e["title"] + (" — verified" if e["verified"] else "")) if e["ok"] else f"✘ {e['title']}: {e.get('error')}")
             return 0 if e["ok"] else 1
         if cmd == "auto":
-            done = apply_auto()
+            done = apply_auto([args[i + 1] for i, a in enumerate(args[:-1]) if a == "--project"])
             if say:
                 return say(done) or 0
             for e in done:

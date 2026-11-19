@@ -65,7 +65,8 @@ function folders() {
 
 const FIX_MODES = [
   ['ask', 'Ask me', 'Each fix shows exactly what will change and waits for you to confirm.', true],
-  ['auto', 'Automatic', 'Safe fixes run as soon as a scan or the daily check finds the problem. You get a summary and can undo any of them.', false],
+  ['auto', 'Automatic: safe fixes', 'Your editor, npm and git settings, and malware in known malware locations, as soon as a scan or the daily check finds them.', false],
+  ['all', 'Automatic: remove malware too', 'Also removes everything else Ardvane finds: stops malware processes, quarantines malware files and extensions, and cuts injected code out of your projects.', false],
   ['off', 'Off', 'Only report problems — you fix everything yourself.', false],
 ];
 
@@ -75,11 +76,11 @@ function autofixMode() {
     try { await api('/api/settings', { autofix: m }); await refresh(); toast(`Fixes: ${FIX_MODES.find(x => x[0] === m)[1]}`); } catch (e) { showError(e); }
   };
   return card('Fixes', 'check', h('div', { class: 'card-pad stack' },
-    h('div', { class: 'choices choices-3' }, FIX_MODES.map(([m, title, desc, rec]) => choice('radio', current === m, String(title), String(desc), pick(String(m)), false, !!rec))),
+    h('div', { class: 'choices' }, FIX_MODES.map(([m, title, desc, rec]) => choice('radio', current === m, String(title), String(desc), pick(String(m)), false, !!rec))),
     h('div', { class: 'help' },
-      h('strong', { text: 'Safe to fix automatically: ' }), 'editor auto-run settings, npm install scripts, switched-off git protection, and malware in known malware locations (moved to quarantine, never deleted).',
-      h('br'), h('strong', { text: 'Always asks first: ' }), 'stopping a running process, moving one of your projects, and anything that only might be malware.',
-      h('br'), h('strong', { text: 'Never automatic: ' }), 'anything on GitHub, rotating secrets — those stay in your to-do list.')));
+      h('strong', { text: 'Nothing is ever deleted: ' }), 'malware is moved to quarantine and kept as evidence, an edited file keeps its original there, and every fix except stopping a process can be undone from Protection → Fix history.',
+      h('br'), h('strong', { text: 'Inside a project, ' }), 'only the parts flagged as malware are removed (a line of injected code, a fake font, a worm\'s install script) — your own code stays. Moving a whole project always asks first.',
+      h('br'), h('strong', { text: 'Never automatic: ' }), 'anything on GitHub, rotating secrets, updating a hijacked package — those stay in your to-do list.')));
 }
 
 function github() {

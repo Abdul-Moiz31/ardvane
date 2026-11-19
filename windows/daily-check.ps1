@@ -172,7 +172,7 @@ if ($py -and $ghArgs.Count -gt 0 -and (Test-Path "$Dest\github_check.py")) {
 # 8. automatic fixes (only in "Automatic" mode)
 $fixMode = 'ask'
 try { $st2 = Get-Content "$Dest\settings.json" -Raw -ErrorAction Stop | ConvertFrom-Json; if ($st2.autofix) { $fixMode = "$($st2.autofix)" } } catch { }
-if ($py -and $fixMode -eq 'auto' -and (Test-Path "$Dest\autofix.py")) {
+if ($py -and ($fixMode -eq 'auto' -or $fixMode -eq 'all') -and (Test-Path "$Dest\autofix.py")) {
     $fixed = Invoke-Native { & $py.Exe @($py.Args) "$Dest\autofix.py" auto 2>&1 }
     if ($fixed) {
         Add-Line '8. Automatic fixes'
