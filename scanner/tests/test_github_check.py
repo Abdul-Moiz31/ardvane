@@ -61,6 +61,32 @@ class Bursts(unittest.TestCase):
         self.assertEqual(gc.bursts([])[0], 0)
 
 
+class WormRepos(unittest.TestCase):
+    """Repositories the worms create in the victim's own account to publish what they stole."""
+
+    def test_exfiltration_repos_are_found_by_description_or_name(self):
+        repos = [{"full_name": "me/x8k2ab91mn0qz7c4rt", "name": "x8k2ab91mn0qz7c4rt", "description": "Sha1-Hulud: The Second Coming."},
+                 {"full_name": "me/Shai-Hulud", "name": "Shai-Hulud", "description": None},
+                 {"full_name": "me/s1ngularity-repository-0", "name": "s1ngularity-repository-0", "description": ""},
+                 {"full_name": "me/r", "name": "r", "description": "Shai-Hulud: Here We Go Again."},
+                 {"full_name": "me/dune-notes", "name": "dune-notes", "description": "My notes about Shai-Hulud in Dune"},
+                 {"full_name": "me/app", "name": "app", "description": "a web app"}]
+        self.assertEqual([full for full, _ in gc.worm_repos(repos)],
+                         ["me/x8k2ab91mn0qz7c4rt", "me/Shai-Hulud", "me/s1ngularity-repository-0", "me/r"])
+
+    def test_account_check_reports_them_as_danger(self):
+        class FakeClient:
+            truncated = []
+
+            def get_all(self, path):
+                return [{"full_name": "me/x8k2ab91mn0qz7c4rt", "name": "x8k2ab91mn0qz7c4rt", "pushed_at": "2020-01-01T00:00:00Z",
+                         "description": "Sha1-Hulud: The Second Coming."}]
+        result = {"findings": [], "notes": []}
+        gc.check_account(FakeClient(), None, "me", "me", 7, 5, False, False, result, {})
+        self.assertEqual([(f[0], f[1]) for f in result["findings"]], [("DANGER", "me/x8k2ab91mn0qz7c4rt")])
+        self.assertIn("rotate", result["findings"][0][2])
+
+
 class Usernames(unittest.TestCase):
     def test_invalid_usernames_are_refused_before_any_request(self):
         self.assertEqual(gc.main(["bad/name"]), 3)

@@ -3,6 +3,21 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.8.0
+
+- **Secrets committed to your repositories.** GitHub, npm, AWS, OpenAI, Anthropic, Slack, Stripe and PyPI keys and
+  private keys in the files a repository would share, and `.env` files that aren't git-ignored. Only formats that can't
+  be anything else count, placeholders are ignored, and git-ignored files are never reported. Shown as "worth a look",
+  with the steps to revoke the key and remove it from history.
+- **Credentials in plain files on this computer:** npm, GitHub CLI, AWS, Docker, PyPI, git and netrc credentials kept
+  in files that stealers copy first, with the safer place for each. Their values are never read out or shown. After
+  an infection, this is your list of what to rotate.
+- **Worm traces in your GitHub account:** repositories the Shai-Hulud worms create to publish stolen secrets
+  ("Sha1-Hulud: The Second Coming.", "Shai-Hulud: Here We Go Again.", `s1ngularity-repository`) are reported as
+  DANGER by the GitHub check.
+- **Fewer false alarms:** the `.pth` files every virtualenv and setuptools install creates are no longer reported;
+  a `.pth` that runs hidden code is still caught, also inside a project's own `.venv`.
+
 ## 0.7.0
 
 - **A new look for the dashboard: "Midnight".** Chosen from three directions inspired by Motion (Framer Motion), the

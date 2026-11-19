@@ -41,11 +41,15 @@ for p in "$HOME/Library/Application Support/VSCodeUpdater" "$HOME/.node_modules"
 done
 # machine checks shared with the full scan: the malware list, worm persistence (wiper daemons, rogue runners, shell
 # sabotage, git templates), AI-agent configs in your home folder and editor extensions
-if [ -n "$PY" ] && [ -f "$DEST/hostcheck.py" ]; then
+HOST=""; [ -n "$PY" ] && [ -f "$DEST/hostcheck.py" ] && HOST="$("$PY" "$DEST/hostcheck.py" 2>/dev/null)"
+host() {  # host GROUP...: report hostcheck's findings for these groups (or every group but those, with "!")
+  local lvl text path group
   while IFS=$'\t' read -r lvl text path group; do
+    if [ "$1" = "!" ]; then [ "$group" = "$2" ] && continue; else [ "$group" = "$1" ] || continue; fi
     case "$lvl" in D) bad "$text" ;; W) chk "$text" ;; esac
-  done < <("$PY" "$DEST/hostcheck.py" 2>/dev/null)
-fi
+  done <<< "$HOST"
+}
+host ! protections
 [ $danger -eq 0 ] && out "  ✅ none"
 
 # ---------------------------------------------------------------- 2. processes
@@ -194,6 +198,7 @@ if [ -f "$seen" ]; then
   [ -n "$ups" ] && out "  editor extensions updated: $ups"
 fi
 mv "$now_ids" "$seen"      # what is installed now: an extension removed and installed again counts as new
+host protections
 csrutil status 2>/dev/null | grep -q enabled || chk "System Integrity Protection is not enabled"
 spctl --status 2>/dev/null | grep -q enabled || chk "Gatekeeper is not enabled"
 [ $danger -eq $n ] && [ $warn -eq $nw ] && out "  ✅ intact"

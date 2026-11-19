@@ -175,6 +175,32 @@ def check_extensions(cr, out):
                     break
 
 
+# Credentials kept in plain files - the first thing every stealer and worm copies. Values are never read out or shown:
+# only whether a file holds one. (file, what it is, test on the file's text, safer place)
+PLAIN_SECRETS = (
+    (".npmrc", "npm token", re.compile(r"_authToken\s*=\s*(?!\$\{)\S{8,}"), "use a short-lived granular token, or `npm login` per session"),
+    (".git-credentials", "git passwords / tokens", re.compile(r"https?://[^:\s]+:[^@\s]{8,}@"), "use the system keychain: git config --global credential.helper osxkeychain (or manager on Windows)"),
+    (".config/gh/hosts.yml", "GitHub CLI token", re.compile(r"oauth_token:\s*\S{8,}"), "run `gh auth logout` then `gh auth login`: it then keeps the token in the system keychain"),
+    (".aws/credentials", "AWS secret key", re.compile(r"aws_secret_access_key\s*=\s*\S{16,}"), "use AWS SSO (`aws configure sso`) or short-lived credentials"),
+    (".docker/config.json", "registry password", re.compile(r'"auth"\s*:\s*"[A-Za-z0-9+/=]{12,}"'), "use a credential helper (\"credsStore\": \"osxkeychain\" / \"desktop\")"),
+    (".pypirc", "PyPI password / token", re.compile(r"^\s*password\s*[:=]\s*\S{8,}", re.M), "use trusted publishing or keyring"),
+    (".netrc", "machine password", re.compile(r"\bpassword\s+\S{6,}"), "remove passwords you no longer need"),
+)
+
+
+def check_secrets(out):
+    """Which credentials sit in plain files a stealer would copy. A list to protect - and to rotate after an infection."""
+    for rel, what, rx, better in PLAIN_SECRETS:
+        path = os.path.join(HOME, *rel.split("/"))
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read(1_000_000)
+        except OSError:
+            continue
+        if rx.search(text):
+            out.append(("W", f"{what} stored in plain text in ~/{rel} - stealers copy this file first; {better}", path))
+
+
 def check_paths(out):
     """Known malware locations from the shared list (the fixer can quarantine every one of them)."""
     spec = importlib.util.spec_from_file_location("autofix", kitlib.find("autofix.py"))
@@ -192,7 +218,8 @@ def check_paths(out):
 
 # check -> the scan report section its findings belong to (the scripts print each group in its own section)
 CHECKS = ((check_paths, "malware", False), (check_runners, "malware", False), (check_shell_files, "shell", False),
-          (check_git, "shell", False), (check_agent_configs, "editors", True), (check_extensions, "editors", True))
+          (check_git, "shell", False), (check_agent_configs, "editors", True), (check_extensions, "editors", True),
+          (check_secrets, "protections", False))
 
 
 def run_all():

