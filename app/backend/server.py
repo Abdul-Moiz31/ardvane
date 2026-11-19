@@ -26,8 +26,8 @@ from .system import kit_env, python_exe, run
 from .scanjob import ScanJob
 
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-                ".png": "image/png", ".ico": "image/x-icon", ".svg": "image/svg+xml"}
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
+                ".png": "image/png", ".ico": "image/x-icon", ".svg": "image/svg+xml", ".woff2": "font/woff2"}
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 TIME_RE = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 

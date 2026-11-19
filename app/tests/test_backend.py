@@ -570,6 +570,13 @@ class Server(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", r.getheader("Content-Security-Policy"))
         self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
         self.assertEqual(self.req("GET", "/js/main.js")[0], 200)
+        # the bundled fonts load: served as font/woff2 and allowed by the policy (nothing comes from the internet)
+        self.assertIn("font-src 'self'", r.getheader("Content-Security-Policy"))
+        for font in ("geist", "geist-mono", "newsreader-italic"):
+            status, body, fr = self.req("GET", f"/fonts/{font}.woff2")
+            self.assertEqual((status, fr.getheader("Content-Type")), (200, "font/woff2"), font)
+            self.assertEqual(body[:4], b"wOF2", font)
+        self.assertEqual(self.req("GET", "/icon.svg")[0], 200)
 
     def test_static_traversal_and_hidden_files_refused(self):
         for p in ("/../backend/server.py", "/js/../../backend/server.py", "/js/%2e%2e/%2e%2e/backend/cli.py", "/.hidden.js", "/js/x.py"):
