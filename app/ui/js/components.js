@@ -36,7 +36,7 @@ export function chipList(items, ic, onRemove) {
 /**
  * Change a saved list in Settings. Sends only the change ({add} / {remove}) or a whole new list, so a page showing an
  * out-of-date list can't drop entries. Returns the error text, or '' when saved.
- * @param {string} key 'folders' | 'github_repos' @param {string[]|{add: string}|{remove: string}} change @param {string} done
+ * @param {string} key 'folders' | 'github_repos' @param {string[]|{add: string}|{remove: string}|{reset: boolean}} change @param {string} done
  */
 export async function changeList(key, change, done) {
   try { await api('/api/settings', { [key]: change }); await refresh(); toast(done); return ''; }

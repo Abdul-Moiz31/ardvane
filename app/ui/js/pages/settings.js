@@ -27,9 +27,13 @@ function dailyCheck() {
 
 function folders() {
   const s = S.data.settings;
-  const input = /** @type {HTMLInputElement} */ (h('input', { type: 'text', class: 'grow', 'aria-label': 'Folder to add', placeholder: S.data.os === 'windows' ? 'C:\\Users\\you\\code' : '~/code' }));
-  const save = async (/** @type {string[]|{add: string}|{remove: string}} */ change) => { S.folderErr = await changeList('folders', change, 'Folders saved'); rerender(); };
-  const add = () => { const v = input.value.trim(); if (v) save({ add: v }); };
+  const input = /** @type {HTMLInputElement} */ (h('input', { type: 'text', class: 'grow', 'aria-label': 'Folder to add', value: S.folderDraft, placeholder: S.data.os === 'windows' ? 'C:\\Users\\you\\code' : '~/code' }));
+  const save = async (/** @type {{add: string}|{remove: string}|{reset: boolean}} */ change) => {
+    S.folderErr = await changeList('folders', change, 'Folders saved');
+    S.folderDraft = S.folderErr && 'add' in change ? change.add : '';       // a typo stays in the box to fix
+    rerender();
+  };
+  const add = () => { const v = input.value.trim(); if (v) { input.value = ''; delete input.dataset.dirty; save({ add: v }); } };
   const choose = async () => {
     try {
       const r = await api('/api/pick-folder', {});
@@ -48,9 +52,14 @@ function folders() {
     h('div', { class: 'divider' }),
     h('div', { class: 'field' }, h('label', { text: 'Project folders' }),
       h('div', { class: 'help', text: 'The daily check scans every git project inside these folders, plus your Downloads folder.' + (s.folders_custom ? '' : ' These are the defaults.') })),
-    chipList(s.folders, 'folder', f => save({ remove: f })),
+    (s.folder_info || []).length
+      ? h('div', { class: 'chips' }, s.folder_info.map(f => h('div', { class: 'chip' + (f.exists ? '' : ' chip-missing') }, icon('folder'),
+          h('span', { class: 'mono grow', text: f.path }),
+          f.exists ? null : h('span', { title: 'This folder is not on this computer right now (deleted, renamed or on a drive that is not plugged in). It is skipped until it is back.' }, pill('warn', 'Not found', 'alert')),
+          button('', () => save({ remove: f.path }), 'btn-sm btn-ghost', 'x', { 'aria-label': 'Remove ' + f.path, title: 'Remove' }))))
+      : h('p', { class: 'help', text: 'No project folders: the daily check only scans your Downloads folder. Add the folders where you keep your code.' }),
     h('div', { class: 'row' }, chooseBtn, h('span', { class: 'muted small', text: 'or type a path' }), input, button('Add', add, '', 'plus'),
-      s.folders_custom ? button('Reset to defaults', () => save(s.default_folders), 'btn-ghost') : null),
+      s.folders_custom ? button('Reset to defaults', () => save({ reset: true }), 'btn-ghost') : null),
     S.folderErr ? h('div', { class: 'err', role: 'alert', text: S.folderErr }) : null));
 }
 
@@ -108,7 +117,7 @@ function githubRepos() {
   const input = /** @type {HTMLInputElement} */ (h('input', { type: 'text', class: 'grow', 'aria-label': 'Repository to add',
     placeholder: 'owner/name or https://github.com/owner/name', autocomplete: 'off', spellcheck: 'false' }));
   const save = async (/** @type {{add: string}|{remove: string}} */ change) => { S.repoErr = await changeList('github_repos', change, 'Repositories saved'); rerender(); };
-  const add = () => { const v = input.value.trim(); if (v) save({ add: v }); };
+  const add = () => { const v = input.value.trim(); if (v) { input.value = ''; delete input.dataset.dirty; save({ add: v }); } };
   input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
   return h('div', { class: 'stack' },
     h('div', { class: 'field' }, h('label', { text: 'Repositories to scan' }),

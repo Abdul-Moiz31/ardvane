@@ -35,8 +35,45 @@ function render() {
   badge.textContent = String(open);
   badge.classList.toggle('danger', !!(S.data.todo && S.data.todo.danger));
   const target = $('#page-' + page);
-  if (target) target.replaceChildren(...PAGES[page](sub).filter(Boolean));
+  if (target) keepTyping(target, () => target.replaceChildren(...PAGES[page](sub).filter(Boolean)));
 }
+
+const TYPED = 'input[type=text], input[type=time], input[type=search], input:not([type]), textarea';
+
+/**
+ * Pages are rebuilt whenever new data arrives (a scan update, the to-do list loading, the tab coming back into view).
+ * Whatever the user is typing - and where the cursor is - must survive that.
+ * @param {Element} target @param {() => void} build
+ */
+function keepTyping(target, build) {
+  const key = (/** @type {Element} */ el) => el.getAttribute('aria-label') || el.getAttribute('name') || el.id;
+  /** @type {Map<string, string>} */
+  const typed = new Map();
+  /** @type {{k: string, s: number|null, e: number|null}|null} */
+  let focus = null;
+  target.querySelectorAll(TYPED).forEach(n => {
+    const el = /** @type {HTMLInputElement} */ (n), k = key(el);
+    if (!k || !el.dataset.dirty) return;
+    typed.set(k, el.value);
+    if (el === document.activeElement) focus = { k, s: el.selectionStart, e: el.selectionEnd };
+  });
+  build();
+  target.querySelectorAll(TYPED).forEach(n => {
+    const el = /** @type {HTMLInputElement} */ (n), k = key(el);
+    if (!k) return;
+    const v = typed.get(k);
+    if (v !== undefined) { el.value = v; el.dataset.dirty = '1'; }
+    if (focus && focus.k === k) {
+      el.focus({ preventScroll: true });
+      try { el.setSelectionRange(focus.s, focus.e); } catch (e) { /* type=time has no selection */ }
+    }
+  });
+}
+// An input the user has typed into keeps its text across re-renders until the page itself clears it.
+document.addEventListener('input', e => {
+  const el = /** @type {HTMLElement} */ (e.target);
+  if (el && el.matches && el.matches(TYPED)) el.dataset.dirty = '1';
+});
 
 setRenderer(render);
 onOffline(setOfflineBanner);

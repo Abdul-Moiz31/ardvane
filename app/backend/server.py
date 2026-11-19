@@ -45,6 +45,10 @@ class App:
         return cls.job.state(dismissed) if cls.job else None
 
 
+MAX_BODY = 64 * 1024                 # API requests are small JSON documents
+MAX_DRAIN = 1024 * 1024
+
+
 class ApiError(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -76,6 +80,7 @@ def get_state(q):
             "settings": {"autofix": s["autofix"], "github_enabled": s["github_enabled"], "github_user": s["github_user"],
                          "github_repos": s["github_repos"], "feed_updates": s["feed_updates"],
                          "package_lookups": s["package_lookups"], "folders": folders,
+                         "folder_info": settings.folder_info(folders),
                          "folders_custom": custom, "default_folders": DEFAULT_FOLDERS, "gh": bool(shutil.which("gh"))},
             "feed": detections.status(), "scan": App.scan_state(s["dismissed"])}
 
@@ -118,12 +123,10 @@ def get_preview(q):
 def post_scan(b):
     if App.job and App.job.finished is None:
         raise ApiError(409, "a scan is already running")
-    folders = []
-    for f in b.get("folders") or []:
-        p = os.path.abspath(os.path.expanduser(str(f)))
-        if not os.path.isdir(p):
-            raise ApiError(400, f"folder not found: {f}")
-        folders.append(p)
+    asked = [str(f) for f in b.get("folders") or []]
+    folders = [p for p in (os.path.abspath(os.path.expanduser(f)) for f in asked) if os.path.isdir(p)]
+    if asked and not folders:      # folders that are gone for now (an unplugged drive) are skipped, not fatal
+        raise ApiError(400, "none of these folders exist: " + ", ".join(asked[:3]))
     user, repos = "", []
     if b.get("github"):
         s = settings.load()
@@ -253,7 +256,7 @@ def post_settings(b):
                     raise ValueError("unknown fix mode")
                 s["autofix"] = b["autofix"]
             if "folders" in b:
-                settings.save_folders(settings.change_list(settings.load_folders()[0], b["folders"], settings.clean_folders))
+                settings.change_folders(b["folders"])
     except ValueError as e:
         raise ApiError(400, str(e))
     return {"ok": True}
@@ -387,7 +390,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             return self._error(415, "JSON body required")
         length = int(self.headers.get("Content-Length") or 0)
-        if length > 64 * 1024:
+        if length > MAX_BODY:
+            # Read (and drop) a moderately oversized body first: closing a socket with unread data sends a reset that
+            # can reach the browser before this answer does. Anything bigger is refused without reading it.
+            if length <= MAX_DRAIN:
+                while length > 0:
+                    chunk = self.rfile.read(min(length, 65536))
+                    if not chunk:
+                        break
+                    length -= len(chunk)
+            self.close_connection = True
             return self._error(413, "request too large")
         try:
             body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")

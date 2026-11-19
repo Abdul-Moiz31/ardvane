@@ -90,7 +90,7 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
     cand=("$HOME/Documents" "$HOME/Desktop" "$HOME/Downloads" "$HOME/code" "$HOME/projects")
   fi
   for d in ${cand[@]+"${cand[@]}"}; do
-    if [ ! -d "$d" ]; then [ -f "$DEST/projects.txt" ] && chk "folder in projects.txt not found: $d"; continue; fi
+    if [ ! -d "$d" ]; then [ -f "$DEST/projects.txt" ] && chk "project folder not found, skipped: ${d/#$HOME/~} — remove it in Ardvane › Settings › What gets scanned if it's gone for good"; continue; fi
     if ls "$d" >/dev/null 2>&1; then roots+=("$d")
     else chk "can't read ${d/#$HOME/~} — give /bin/bash Full Disk Access (System Settings › Privacy & Security) so the daily check can scan it"; fi
   done
@@ -117,7 +117,8 @@ if [ -n "$PY" ] && [ -f "$DEST/checkrepo.py" ]; then
   [ ${#roots[@]} -gt 0 ] && while IFS= read -r g; do
     repos=$((repos+1)); scan_dir "$(dirname "$g")"; repo_hooks "$(dirname "$g")"
   done < <(find "${roots[@]}" -maxdepth 5 -name .git -type d -not -path "*/node_modules/*" 2>/dev/null)
-  if [ $repos -eq 0 ]; then chk "scanned 0 repositories — nothing was checked. List your project folders in ~/.checkrepo/projects.txt"
+  if [ ${#cand[@]} -eq 0 ]; then out "  no project folders chosen — add yours in Ardvane › Settings › What gets scanned"
+  elif [ $repos -eq 0 ]; then chk "scanned 0 repositories — nothing was checked. Choose your project folders in Ardvane › Settings › What gets scanned"
   else out "  scanned $repos repositories"; fi
   [ -d "$HOME/Downloads" ] && scan_dir "$HOME/Downloads"
 else

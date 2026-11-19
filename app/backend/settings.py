@@ -10,7 +10,7 @@ import re
 import threading
 
 from . import kit
-from .config import DEFAULT_FOLDERS, DEST, PROJECTS, SETTINGS
+from .config import DEFAULT_FOLDERS, DEST, HOME, PROJECTS, SETTINGS
 from .system import read_json, write_private
 
 GITHUB_USER_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
@@ -104,32 +104,80 @@ def set_dismissed(s, key, hidden):
         s["dismissed"] = [k for k in s["dismissed"] if k != key]
 
 
+def folder_path(f):
+    """Where a listed folder is on disk (~ expanded, normalised)."""
+    return os.path.normpath(os.path.expanduser(str(f).strip()))
+
+
+def tidy_folder(f):
+    """A folder as it is stored and shown: ~/... inside your home folder, else the full path. ValueError if it can't
+    be a folder path at all (relative, several lines)."""
+    f = str(f).strip()
+    if not f or any(c in f for c in "\n\r\0"):
+        raise ValueError("enter a folder path, for example ~/code")
+    p = folder_path(f)
+    if not os.path.isabs(p):
+        raise ValueError(f"use a full path, for example ~/{f}")
+    if "#" in f:
+        raise ValueError("a folder path with # in it can't be saved (# starts a comment in projects.txt)")
+    if p == HOME or p.startswith(HOME + os.sep):
+        return "~" + p[len(HOME):]
+    return p
+
+
 def load_folders():
-    """(folders, customised?) — folders the daily check searches for git projects."""
+    """(folders, customised?) - folders the daily check and "My project folders" scans search for git projects.
+    Without a saved list these are the defaults that exist on this computer (the scripts skip the others too)."""
     try:
         with open(PROJECTS, encoding="utf-8") as f:
             rows = [line.split("#", 1)[0].strip() for line in f]
         return [r for r in rows if r], True
     except OSError:
-        return list(DEFAULT_FOLDERS), False
+        return [tidy_folder(d) for d in DEFAULT_FOLDERS if os.path.isdir(folder_path(d))], False
 
 
-def clean_folders(folders):
-    """Folders that exist, without duplicates, or raise ValueError."""
-    if not isinstance(folders, list):
-        raise ValueError("folders must be a list")
-    rows = []
-    for f in (str(f).strip() for f in folders):
-        if f and f not in rows:
-            rows.append(f)
+def folder_info(folders):
+    """Each listed folder with whether it is still there, for the dashboard."""
+    return [{"path": f, "exists": os.path.isdir(folder_path(f))} for f in folders]
+
+
+def change_folders(change):
+    """The folder list after {"add": path}, {"remove": path}, {"reset": true} or a whole new list, saved. A new folder
+    must exist; folders already listed stay even if they're gone for now (an unplugged drive), and can always be
+    removed. Paths are compared as folders, so ~/code, /Users/you/code and ~/code/ are the same entry."""
+    current, _ = load_folders()
+    if isinstance(change, dict) and change == {"reset": True}:
+        try:
+            os.remove(PROJECTS)          # the scripts and the dashboard fall back to the defaults
+        except FileNotFoundError:
+            pass
+        return load_folders()[0]
+    if isinstance(change, dict) and list(change) == ["add"]:
+        new = [change["add"]]
+        rows = current + new
+    elif isinstance(change, dict) and list(change) == ["remove"]:
+        gone = folder_path(change["remove"])
+        new, rows = [], [f for f in current if folder_path(f) != gone]
+    elif isinstance(change, list):
+        new, rows = [f for f in change if folder_path(f) not in {folder_path(c) for c in current}], change
+    else:
+        raise ValueError("expected a list, {add: ...}, {remove: ...} or {reset: true}")
+    for f in new:
+        if not os.path.isdir(folder_path(tidy_folder(f))):
+            raise ValueError(f"folder not found: {str(f).strip()}")
+    out, seen = [], set()
     for f in rows:
-        if "\n" in f or not os.path.isdir(os.path.expanduser(f)):
-            raise ValueError(f"folder not found: {f}")
-    return rows[:MAX_FOLDERS]
+        t = tidy_folder(f)
+        if folder_path(t) not in seen:
+            seen.add(folder_path(t))
+            out.append(t)
+    if len(out) > MAX_FOLDERS:
+        raise ValueError(f"at most {MAX_FOLDERS} folders")
+    save_folders(out)
+    return out
 
 
-def save_folders(folders):
-    rows = clean_folders(folders)
+def save_folders(rows):
     os.makedirs(DEST, exist_ok=True)
     with open(PROJECTS, "w", encoding="utf-8") as fh:
         fh.write("# Folders the daily check scans for git projects (one per line). Edited by the dashboard.\n")

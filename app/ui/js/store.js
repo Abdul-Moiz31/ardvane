@@ -19,7 +19,7 @@ export const S = {
   /** @type {{group: string, path: string, title: string}[]|null} */ docs: null,
   /** @type {any} */ tasks: null,
   /** @type {any} */ fixes: null,
-  docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '', repoErr: '',
+  docPath: '', docText: '', reportId: '', reportText: '', reportFilter: 'all', showPassed: false, folderErr: '', folderDraft: '', repoErr: '',
   scanOpts: { mode: 'full', where: 'home', /** @type {boolean|null} */ github: null },
 };
 
