@@ -365,6 +365,41 @@ AUTO_LABELS = {"command", "auto-run task", "git hook", "dev container", "NODE_OP
 def auto_label(label):
     return label in AUTO_LABELS or label.strip('"') in AUTO_SCRIPTS
 
+# ---------------------------------------------------------------- secrets committed to a repository
+# Only formats that can't be anything else (a fixed prefix plus a long random body). What stealers and worms harvest.
+SECRET_PATTERNS = (
+    ("GitHub token", r"\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{80,})\b"),
+    ("npm token", r"\bnpm_[A-Za-z0-9]{36}\b"),
+    ("AWS access key", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("Slack token", r"\bxox[baprs]-[0-9]{6,}-[0-9A-Za-z-]{10,}\b"),
+    ("Stripe live key", r"\b(?:sk|rk)_live_[0-9A-Za-z]{24,}\b"),
+    ("OpenAI API key", r"\bsk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,}\b|\bsk-proj-[A-Za-z0-9_-]{80,}\b"),
+    ("Anthropic API key", r"\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_-]{80,}\b"),
+    ("PyPI token", r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}\b"),
+    ("private key", r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"),
+)
+SECRET_RE = re.compile("|".join(f"(?P<s{i}>{rx})" for i, (_, rx) in enumerate(SECRET_PATTERNS)))
+ENV_NAME_RE = re.compile(r"^\.env(?:\.(?!example$|sample$|template$|dist$|defaults?$)[\w.-]+)?$")
+
+
+def secrets_in(text):
+    """[kind] of real-looking secrets in `text`. Placeholders (ghp_xxxx…, a body of one repeated character or a short
+    alphabet) and keys in documentation of the format are not counted."""
+    found = []
+    for m in SECRET_RE.finditer(text):
+        kind = SECRET_PATTERNS[int(m.lastgroup[1:])][0]
+        body = m.group(0).split("_", 1)[-1] if "_" in m.group(0)[:12] else m.group(0)
+        if kind != "private key" and len(set(body)) < 12:
+            continue
+        if kind == "private key":
+            after = text[m.end():m.end() + 200]
+            if not re.search(r"[A-Za-z0-9+/=]{40,}", after):       # a header with no key material is documentation
+                continue
+        if kind not in found:
+            found.append(kind)
+    return found
+
+
 # ---------------------------------------------------------------- GitHub Actions workflows
 WORKFLOW_SECRETS_RE = re.compile(r"toJSON\(\s*secrets\s*\)", re.I)
 WORKFLOW_NET_RE = re.compile(r"\b(?:curl|wget|Invoke-WebRequest|iwr|nc)\b|webhook\.site|upload-artifact|base64", re.I)
@@ -687,11 +722,12 @@ class Kind:
         self.is_pth = self.name.endswith(".pth")
         self.is_py_manifest = self.name in PY_MANIFESTS or bool(PY_REQ_RE.match(self.name))
         self.is_workflow = dirs[-2:] == [".github", "workflows"] and self.name.endswith((".yml", ".yaml"))
+        self.is_env = bool(ENV_NAME_RE.match(self.name))
         # files that run or configure code on their own: never skipped quietly
         self.sensitive = self.in_editor_dir or self.is_agent_cfg or self.is_config or self.is_font or self.is_git_hook \
             or self.is_pth or self.name in ("package.json", ".mcp.json")
         self.interesting = (self.sensitive or self.is_code or self.is_instr or self.is_lockfile or self.is_py_manifest
-                            or self.is_workflow
+                            or self.is_workflow or self.is_env
                             or self.name == ".gitignore" or self.name.endswith((".bat", ".json")))
 
 
@@ -710,6 +746,7 @@ class Scan:
         self.pending_settings = []
         self.runs = []                      # (rel of the file that runs it, label, script path as written)
         self.gitignore_configbat = False
+        self.git_mode = False               # scanning what a git repository would commit (secrets only count then)
         self.configbat_files = []
 
     def add(self, sev, rule, rel, detail):
@@ -767,6 +804,7 @@ class Scan:
 
     def walk(self):
         files = None if (self.include_deps or self.all_files) else self.git_files()
+        self.git_mode = files is not None
         if files is not None:
             for rel in files:
                 # tracked files are scanned even inside node_modules/venv: committing those is unusual and can hide payloads
@@ -851,6 +889,10 @@ class Scan:
             return
 
         text = decode(data)
+        if self.git_mode and not k.is_lockfile:      # outside git there is no telling what is ignored and never shared
+            self.secrets(rel, k, text)
+        if k.is_env:
+            return
         if k.name == ".gitignore":
             if GITIGNORE_WORM_RE.search(text):
                 self.add("DANGER", "gitignore-worm", rel, "hides the worm's push scripts")
@@ -1000,6 +1042,13 @@ class Scan:
         if reasons:
             self.add("WARNING", "ai-instructions", rel, "; ".join(reasons) + " - review before letting an AI agent work in this repo")
 
+    def secrets(self, rel, k, text):
+        kinds = secrets_in(text)
+        if kinds:
+            where = "an environment file that isn't git-ignored" if k.is_env else "this file"
+            self.add("WARNING", "secret", rel, f"{', '.join(kinds)} in {where} - anyone with the repository has it; "
+                     "revoke it, then remove it from the file and from git history")
+
     def pth(self, rel, text):
         """A .pth file: Python runs its `import` lines every time it starts, so code there runs without being called."""
         lines = [l for l in text.splitlines() if PTH_IMPORT_RE.match(l)]
@@ -1008,7 +1057,8 @@ class Scan:
         body = "\n".join(lines)
         if marker_hits(body) or PTH_DANGER_RE.search(body):
             self.add("DANGER", "pth-autorun", rel, "runs hidden code every time Python starts: " + lines[0][:70])
-        else:
+        elif not set(rel.lower().split("/")[:-1]) & {"site-packages", ".venv", "venv", "env", ".tox", "dist-packages"}:
+            # installed packages (virtualenv, setuptools, editable installs) use plain imports here all the time
             self.add("WARNING", "pth-autorun", rel, "runs code every time Python starts - check what it imports")
 
     def git_hook(self, rel, text):

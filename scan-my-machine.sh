@@ -223,6 +223,7 @@ else
 fi
 npmset="$(command -v npm >/dev/null && npm config get ignore-scripts 2>/dev/null)"
 [ "$npmset" = "true" ] && okay "npm install scripts blocked" || info "npm install scripts are allowed (the kit's installer blocks them)"
+host protections
 hp="$(git config --global --get core.hooksPath 2>/dev/null)"
 [ -n "$hp" ] && info "global git hooks folder: $hp" || info "no automatic git scanning yet (install the kit to add it)"
 

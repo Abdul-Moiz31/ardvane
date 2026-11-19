@@ -446,6 +446,21 @@ def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos
     return result
 
 
+# Repositories the self-spreading npm worms create in the victim's own account to publish what they stole
+WORM_REPO_DESC_RE = re.compile(r"Sha1-Hulud: The Second Coming|Shai-Hulud: Here We Go Again|Shai-Hulud Migration", re.I)
+WORM_REPO_NAME_RE = re.compile(r"^(?:Shai-Hulud|s1ngularity-repository(?:-\d+)?)$", re.I)
+
+
+def worm_repos(repos):
+    """[(full name, what it is)] for repositories the worms created to publish stolen secrets."""
+    out = []
+    for r in repos:
+        name, desc = str(r.get("name") or ""), str(r.get("description") or "")
+        if WORM_REPO_DESC_RE.search(desc) or WORM_REPO_NAME_RE.match(name):
+            out.append((r["full_name"], desc or name))
+    return out
+
+
 def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen):
     """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
     # sorted by name, not by push time: a push during the listing can't shift repositories between pages
@@ -460,6 +475,9 @@ def check_account(client, cr, user, login, days, max_repos, rescan, all_branches
     repos = list({r["full_name"]: r for r in client.get_all(path) if isinstance(r, dict) and r.get("full_name")}.values())
     repos.sort(key=lambda r: r.get("pushed_at") or "", reverse=True)          # most recently pushed first
     result["repos"] = len(repos)
+    for full, what in worm_repos(repos):
+        result["findings"].append(["DANGER", full, f"repository created by a Shai-Hulud worm to publish stolen secrets ({what[:60]}). "
+                                   "Your tokens and keys were stolen: rotate them all, then make this repository private and delete it"])
     now = datetime.datetime.now(datetime.timezone.utc)
     recent = [r for r in repos if r.get("pushed_at") and (now - parse_time(r["pushed_at"])).days < days]
     result["recent"] = [{"repo": r["full_name"], "pushed_at": r["pushed_at"], "private": r.get("private", False)} for r in recent]
