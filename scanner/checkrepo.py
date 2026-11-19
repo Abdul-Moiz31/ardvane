@@ -296,6 +296,14 @@ AUTO_SCRIPTS = LIFECYCLE + ("preprepare", "postprepare", "prepack", "postpack", 
                             "predev", "prestart", "prebuild", "pretest", "postdev", "poststart")
 # Python's site module runs any line of a .pth file that starts with `import` - in every Python start-up
 PTH_IMPORT_RE = re.compile(r"^import[ \t]", re.M)
+# .pth files that Python tooling itself writes (virtualenv, setuptools, editable installs, namespace packages)
+PTH_STANDARD_RE = re.compile(r"^(?:_virtualenv|distutils-precedence|__editable__\.[\w.-]+|[\w.-]+-nspkg|easy-install|setuptools)\.pth$", re.I)
+
+
+def k_name(rel):
+    return rel.rsplit("/", 1)[-1]
+
+
 PTH_DANGER_RE = re.compile(r"\bexec\s*\(|\beval\s*\(|b64decode|\bbase64\b|urllib|urlopen|\brequests\.|\bsocket\b"
                            r"|subprocess|os\.system|os\.popen|marshal|zlib\.decompress|codecs\.decode")
 # Git hooks a repository ships for its developers (husky, lefthook, plain .githooks): they run on every commit
@@ -1057,7 +1065,8 @@ class Scan:
         body = "\n".join(lines)
         if marker_hits(body) or PTH_DANGER_RE.search(body):
             self.add("DANGER", "pth-autorun", rel, "runs hidden code every time Python starts: " + lines[0][:70])
-        elif not set(rel.lower().split("/")[:-1]) & {"site-packages", ".venv", "venv", "env", ".tox", "dist-packages"}:
+        elif not (set(rel.lower().split("/")[:-1]) & {"site-packages", ".venv", "venv", "env", ".tox", "dist-packages"}
+                  or any("cache" in d for d in rel.lower().split("/")[:-1]) or PTH_STANDARD_RE.match(k_name(rel))):
             # installed packages (virtualenv, setuptools, editable installs) use plain imports here all the time
             self.add("WARNING", "pth-autorun", rel, "runs code every time Python starts - check what it imports")
 

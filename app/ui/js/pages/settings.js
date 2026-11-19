@@ -3,9 +3,9 @@ import { api } from '../api.js';
 import { h, button, pill, switchEl, choice, card, banner, pageHead, busy } from '../dom.js';
 import { icon } from '../icons.js';
 import { toast, errorText, showError } from '../feedback.js';
-import { nextRun } from '../format.js';
+import { nextRun, fmtTime } from '../format.js';
 import { S, refresh, rerender } from '../store.js';
-import { setRoutine, setOfflineBanner } from '../actions.js';
+import { setRoutine, setOfflineBanner, updateFlow, checkForUpdate } from '../actions.js';
 import { chipList, changeList } from '../components.js';
 
 export function renderSettings() {
@@ -160,13 +160,27 @@ function privacy() {
   return card('Privacy', 'lock', h('div', { class: 'card-pad' }, h('ul', { class: 'help' },
     h('li', { text: 'Runs only on this computer. The dashboard is served from 127.0.0.1 and refuses requests from other websites.' }),
     h('li', { text: 'No account, no telemetry, no tracking. Reports stay in ~/.checkrepo/reports.' }),
-    h('li', { text: 'Internet connections: GitHub, to download the signed detection list and for the GitHub check; and OSV.dev, to look up public package names when you install packages. Both can be turned off under Detections and GitHub.' }),
+    h('li', { text: 'Internet connections: GitHub, to download the signed detection list, for the GitHub check and to look for a new Ardvane version (PyPI instead for pipx installs); and OSV.dev, to look up public package names when you install packages. Each can be turned off under Detections, GitHub and Updates.' }),
     h('li', { text: 'Scans only read files. Nothing is changed unless you press a button that says so.' }))));
 }
 
 function about() {
-  const d = S.data;
-  return h('div', { class: 'card card-pad row' },
-    h('div', { class: 'grow' }, h('h3', { text: `${d.app} ${d.version}` }), h('div', { class: 'help mono', text: d.kit })),
-    button('Stop dashboard', async () => { try { await api('/api/quit', {}); } catch (e) { /* already stopped */ } setOfflineBanner(true); }, 'btn-ghost', 'power'));
+  const d = S.data, u = d.update || {};
+  const checkBtn = button('Check now', () => busy(checkBtn, () => checkForUpdate()), '', 'refresh');
+  const line = u.available ? `Ardvane ${u.latest} is available.` : u.error ? u.error : u.latest ? 'You have the latest version.' : 'Not checked yet.';
+  const toggle = switchEl(!!d.settings.update_checks, async (/** @type {Event} */ e) => {
+    const on = /** @type {HTMLInputElement} */ (e.target).checked;
+    try { await api('/api/settings', { update_checks: on }); await refresh(); toast(on ? 'Ardvane checks for updates' : 'Update checks off'); } catch (err) { showError(err); }
+  }, 'Check for updates');
+  return card('Updates', 'refresh', h('div', { class: 'card-pad stack' },
+    h('div', { class: 'row' },
+      h('div', { class: 'row-icon ' + (u.available ? 'ok' : '') }, icon(u.available ? 'refresh' : 'checkCircle')),
+      h('div', { class: 'grow' }, h('div', { class: 'title', text: `${d.app} ${d.version}` }),
+        h('div', { class: 'help', text: line + (u.checked ? ` Checked ${fmtTime(u.checked)}.` : '') })),
+      u.available && u.can_update ? button(`Update to ${u.latest}`, () => updateFlow(), 'btn-primary', 'refresh') : checkBtn),
+    u.available && !u.can_update ? h('p', { class: 'help', text: `To update: ${u.how}.` }) : null,
+    h('p', { class: 'help', text: 'Ardvane looks for a new version about twice a day while the dashboard is open: one download from GitHub (or PyPI for pipx) that sends nothing about this computer. Updating shows you what\'s new first, then installs it the way you installed Ardvane, refreshes your protection and restarts the dashboard.' }),
+    h('div', { class: 'divider' }),
+    h('div', { class: 'row' }, h('div', { class: 'grow help mono', text: d.kit }),
+      button('Stop dashboard', async () => { try { await api('/api/quit', {}); } catch (e) { /* already stopped */ } setOfflineBanner(true); }, 'btn-ghost', 'power'))), toggle);
 }

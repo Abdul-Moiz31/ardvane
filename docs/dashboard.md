@@ -30,6 +30,21 @@ The dashboard closes itself about 20 minutes after you stop using it. Clicking t
 | **Learn** | All the guides from `docs/`, readable offline. |
 | **Settings** | Daily check time (09:00 by default), which folders are scanned (added with Finder / the Windows folder picker), what the app may fix for you, the optional GitHub check and repositories to scan, and the signed detection list (see below). |
 
+## Updates
+
+When a new version of Ardvane is out, the Overview shows it with a line about what's new. **See what's new** shows the
+release notes; **Update** then:
+
+1. installs the new version the way you installed Ardvane: `brew upgrade` for Homebrew, `pipx upgrade` for pipx, or
+   `git pull` for a clone (only when it has no local changes and is on `main`);
+2. refreshes your protection (scanner, git hooks, shell setup) and re-registers the daily check, so its tamper
+   fingerprints match the new files;
+3. restarts the dashboard on the new version - the page reloads by itself.
+
+Settings → Updates shows your version, when Ardvane last looked, a **Check now** button and an on/off switch. Ardvane
+looks about twice a day while the dashboard is open, with one download from GitHub (PyPI for pipx installs) that sends
+nothing about your computer. A pip install shows the command to run instead.
+
 ## The to-do list
 
 Scans tell you what's wrong; the to-do list makes sure something is done about it.

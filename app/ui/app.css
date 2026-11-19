@@ -106,9 +106,13 @@ p { margin: 0; }
   animation: grow-y .45s var(--spring); }
 .nav-dot { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
-.help-link { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 10px; color: var(--danger); background: var(--danger-soft);
-  border: 1px solid var(--danger-border); font-weight: 600; font-size: 13px; text-decoration: none; transition: transform .35s var(--spring); }
-.help-link:hover { text-decoration: none; transform: translateY(-1px); }
+/* The way to the recovery guide is always there, but it only looks like an alarm when a threat has been found */
+.help-link { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; color: var(--text-3); background: transparent;
+  border: 1px solid transparent; font-weight: 500; font-size: 12.5px; text-decoration: none; transition: transform .35s var(--spring), color .15s, background .15s; }
+.help-link .svg { width: 15px; height: 15px; }
+.help-link:hover { text-decoration: none; color: var(--danger); background: var(--danger-soft); }
+.help-link.alert { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-border); font-weight: 600; font-size: 13px; }
+.help-link.alert:hover { transform: translateY(-1px); }
 .theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; gap: 2px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
 .theme-switch button { display: flex; align-items: center; justify-content: center; gap: 5px; height: 28px; border: 0; border-radius: 7px;
   background: transparent; color: var(--text-3); font: 500 12px var(--font); cursor: pointer; transition: background .2s, color .2s; }
@@ -513,3 +517,4 @@ details.more > .stack { margin-top: 8px; }
   .hero { grid-template-columns: 1fr; grid-template-areas: "ring" "text" "actions"; padding: 24px; }
   .hero-icon { width: 96px; height: 96px; }
 }
+.release-notes { padding: 0; max-width: none; font-size: 14px; max-height: 340px; overflow: auto; }

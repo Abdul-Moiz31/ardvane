@@ -123,6 +123,9 @@ CASES = {
     "catch/pth-runs-hidden-code": {"lib/evil.pth": "import base64;exec(base64.b64decode('cHJpbnQoMSk='))\n"},
     "warn/pth-imports-a-module": {"lib/x.pth": "import mymodule\n"},
     "pass/pth-only-paths": {"lib/paths.pth": "/opt/lib\n../src\n"},
+    "pass/tool-cache-pth-files": {".vercel/cache/py/uv/archive-v0/x/distutils-precedence.pth":
+                                       "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; enabled = os.environ.get(var, 'local') == 'local'; enabled and __import__('_distutils_hack').add_shim(); \n",
+                                   "build/__editable__.mypkg-1.0.pth": "import __editable___mypkg_1_0_finder; __editable___mypkg_1_0_finder.install()\n"},
     "pass/virtualenv-pth-files": {".venv/lib/python3.12/site-packages/_virtualenv.pth": "import _virtualenv\n",
                                   ".venv/lib/python3.12/site-packages/distutils-precedence.pth":
                                       "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; enabled = os.environ.get(var, 'local') == 'local'; enabled and __import__('_distutils_hack').add_shim(); \n"},

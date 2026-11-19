@@ -34,6 +34,8 @@ function render() {
   badge.hidden = !open;
   badge.textContent = String(open);
   badge.classList.toggle('danger', !!(S.data.todo && S.data.todo.danger));
+  const help = $('.help-link');                    // red only while something serious is open
+  if (help) help.classList.toggle('alert', !!(S.data.todo && S.data.todo.danger));
   const target = $('#page-' + page);
   if (!target) return;
   // Animate a page in when you open it, never when it is redrawn with new data (that would flicker)
