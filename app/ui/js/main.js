@@ -35,7 +35,34 @@ function render() {
   badge.textContent = String(open);
   badge.classList.toggle('danger', !!(S.data.todo && S.data.todo.danger));
   const target = $('#page-' + page);
-  if (target) keepTyping(target, () => target.replaceChildren(...PAGES[page](sub).filter(Boolean)));
+  if (!target) return;
+  // Animate a page in when you open it, never when it is redrawn with new data (that would flicker)
+  const entering = page !== lastPage;
+  lastPage = page;
+  target.classList.toggle('enter', entering);
+  keepTyping(target, () => target.replaceChildren(...PAGES[page](sub).filter(Boolean)));
+  if (entering) countUp(target);
+}
+
+/** @type {string} */
+let lastPage = '';
+
+/** Whole numbers in the stat tiles count up from zero when a page opens. @param {Element} root */
+function countUp(root) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  root.querySelectorAll('.tile-value, .hstat-value').forEach(el => {
+    const text = el.textContent || '';
+    if (!/^\d{1,4}$/.test(text)) return;
+    const to = Number(text), start = performance.now();
+    if (!to) return;
+    const step = (/** @type {number} */ now) => {
+      const p = Math.min(1, (now - start) / 800);
+      el.textContent = String(Math.round(to * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    el.textContent = '0';
+    requestAnimationFrame(step);
+  });
 }
 
 const TYPED = 'input[type=text], input[type=time], input[type=search], input:not([type]), textarea';

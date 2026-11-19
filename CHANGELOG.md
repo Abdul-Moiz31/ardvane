@@ -3,6 +3,18 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.7.0
+
+- **A new look for the dashboard: "Midnight".** Chosen from three directions inspired by Motion (Framer Motion), the
+  tools developers already use, and the security apps in this space. Near-black surfaces, bold headlines, monospace
+  labels and numbers, and one electric-lime accent for the things you act on. The verdict is a big headline with a
+  status ring in its colour, which sweeps while a scan runs.
+- **Light mode** keeps the same design on near-white, with a deeper lime so everything stays readable. Auto follows
+  your computer.
+- **Motion that feels physical**: pages spring in when you open them, lists and chart bars follow in sequence, numbers
+  count up, buttons and toggles respond with a spring. It's Framer Motion's spring, computed in the browser - no
+  library, no download - and it turns off when your system asks for reduced motion.
+
 ## 0.6.0
 
 **Ardvane can now clean up what it finds, on its own if you let it.**
