@@ -340,7 +340,6 @@ class Repositories(unittest.TestCase):
         self.assertEqual(seen["octo/clean"], "2026-01-02T00:00:00Z|all")
 
 
-@unittest.skipIf(os.name == "nt", "uses a POSIX shell script as a stand-in for gh")
 class Scope(unittest.TestCase):
     """Settings > GitHub: every repository you can push to, or only yours and your organizations'."""
 
@@ -371,6 +370,7 @@ class Scope(unittest.TestCase):
                          [("Org/b", "org", True), ("pal/c", "shared", False), ("me/a", "yours", False)])   # newest push first
 
 
+@unittest.skipIf(os.name == "nt", "uses a POSIX shell script as a stand-in for gh")
 class Download(unittest.TestCase):
     """download() through a fake `gh` that writes a given number of bytes, then exits with a given code."""
 
