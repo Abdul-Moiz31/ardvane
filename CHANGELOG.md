@@ -3,6 +3,11 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.11.1
+
+- Bigger, easier to read type in the dashboard: every text size one step up (body 15px, labels 14px), brighter secondary
+  and muted text in light and dark mode, and a wider sidebar.
+
 ## 0.11.0
 
 **A new look for the dashboard, and a new mark: the vane.**
