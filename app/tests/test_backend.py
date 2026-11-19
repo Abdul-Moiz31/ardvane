@@ -22,6 +22,32 @@ from backend.server import App, Handler                            # noqa: E402
 import http.server                                                 # noqa: E402
 
 
+class GithubLive(unittest.TestCase):
+    def test_progress_events_build_the_live_view(self):
+        job = scanjob.ScanJob.__new__(scanjob.ScanJob)          # no scan started
+        job.github_live = {"phase": "", "done": 0, "total": 0, "current": "", "items": []}
+        for ev in [{"event": "phase", "text": "auditing 2 repositories", "total": 2},
+                   {"event": "audited", "repo": "me/a", "done": 1, "total": 2, "outcome": "ok", "findings": []},
+                   {"event": "audited", "repo": "me/b", "done": 2, "total": 2, "outcome": "danger",
+                    "findings": ["runner x", "y", "z", "w"], "force_push": True},
+                   {"event": "phase", "text": "scanning 1 recently pushed repository", "total": 1},
+                   {"event": "branch", "repo": "me/a", "branch": "main"},
+                   {"event": "download", "bytes": 5000000},
+                   {"event": "scanned", "repo": "me/a", "outcome": "clean", "branches": 1, "shared": True}]:
+            job._github_event(ev)
+        live = job.github_live
+        self.assertEqual((live["phase"], live["done"], live["total"]), ("scanning 1 recently pushed repository", 1, 1))
+        self.assertEqual([i["repo"] for i in live["items"]], ["me/a", "me/b", "me/a"])
+        self.assertEqual(live["items"][1]["findings"], ["runner x", "y", "z"])
+        self.assertTrue(live["items"][1]["force_push"])
+        self.assertEqual(live["items"][2]["branches"], 1)
+        self.assertTrue(live["items"][2]["shared"])
+        self.assertFalse(live["items"][0]["shared"])
+        self.assertEqual(live["bytes"], 0)                       # reset once the repository is done
+        job._github_event({"event": "download", "bytes": 7000000})
+        self.assertEqual(live["bytes"], 7000000)
+
+
 class ParseEvents(unittest.TestCase):
     def test_sections_findings_progress_and_result(self):
         lines = ["H\t1. Known malware locations\t", "D\tfound: ~/.n2\t/home/x/.n2", "H\t2. Running processes\t",
@@ -211,6 +237,18 @@ class Settings(unittest.TestCase):
         s["github_repos"] = ["o/a", "evil/../x", 7]                 # a hand-edited file keeps only valid entries
         settings.save(s)
         self.assertEqual(settings.load()["github_repos"], ["o/a"])
+
+    def test_github_scope(self):
+        from backend import server
+        self.assertEqual(settings.load()["github_scope"], "all")                  # every repository you can push to
+        server.post_settings({"github_scope": "owned"})
+        self.assertEqual(settings.load()["github_scope"], "owned")
+        with self.assertRaises(server.ApiError):
+            server.post_settings({"github_scope": "everything"})
+        s = settings.load()
+        s["github_scope"] = "nonsense"                                          # hand-edited: back to the default
+        settings.save(s)
+        self.assertEqual(settings.load()["github_scope"], "all")
 
     def test_list_changes_apply_to_the_saved_list(self):
         self.assertEqual(settings.change_list(["a/b"], {"add": "c/d"}, settings.clean_github_repos), ["a/b", "c/d"])

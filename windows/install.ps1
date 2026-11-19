@@ -70,6 +70,7 @@ Do-It 'copy scanner, hooks and safe-clone into %USERPROFILE%\.checkrepo' {
     Copy-Item "$Scanner\checkrepo.py" "$Dest\checkrepo.py" -Force
     foreach ($f in 'kitlib.py', 'github_check.py', 'autofix.py', 'feed.py', 'ed25519.py', 'safeinstall.py') { Copy-Item "$Scanner\$f" "$Dest\$f" -Force }   # helpers, GitHub check, fixer, signed detection feed, safe install
     Copy-Item "$Scanner\lists\malware-paths.txt" "$Dest\malware-paths.txt" -Force
+    foreach ($f in 'popular-npm.txt', 'popular-pypi.txt') { Copy-Item "$Scanner\lists\$f" "$Dest\$f" -Force }   # what lookalike package names imitate
     Copy-Item "$Scanner\safeclone\git-safeclone" "$Dest\bin\git-safeclone" -Force
     Copy-Item "$PSScriptRoot\safeclone.ps1" "$Dest\bin\safeclone.ps1" -Force
     $hooks = 'applypatch-msg','pre-applypatch','post-applypatch','pre-commit','pre-merge-commit','prepare-commit-msg',

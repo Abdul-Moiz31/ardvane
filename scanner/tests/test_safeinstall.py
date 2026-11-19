@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -104,7 +105,7 @@ class Checking(unittest.TestCase):
         self.saved = si.resolve_npm, si.http_json, si.CACHE, si.load_cache
         si.resolve_npm = lambda folder, specs, args: None
         si.CACHE = os.path.join(self.dir, "osv-cache.json")
-        self.sent, self.osv = [], {}
+        self.sent, self.osv, self.registry = [], {}, {}
         si.http_json = self.fake_osv
 
     def tearDown(self):
@@ -118,11 +119,15 @@ class Checking(unittest.TestCase):
             if mid == "MAL-SOME":
                 return {"affected": [{"versions": ["1.2.3"]}]}
             return {"affected": [{"ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]}]}
+        if body is None:                                                    # a registry lookup (reputation)
+            return self.registry.get(url, {})
         self.sent += [q["package"]["name"] for q in body["queries"]]
         return {"results": [{"vulns": [{"id": i} for i in self.osv.get(q["package"]["name"], [])]} for q in body["queries"]]}
 
     def check(self, tool, *args, osv=True):
-        b, w, notes, count = si.check(tool, list(args), self.dir, use_osv=osv)
+        b, w, notes, count, risky = si.check(tool, list(args), self.dir, use_osv=osv)
+        self.risky = {p.name: [t for _, t in r] for p, r in risky}
+        self.strong = {p.name for p, r in risky if any(st for st, _ in r)}
         return sorted(p.name for p, _ in b), sorted(p.name for p, _ in w), notes
 
     def test_ardvane_list_blocks_offline(self):
@@ -178,6 +183,77 @@ class Checking(unittest.TestCase):
             self.assertEqual(si.main(["npm", "run", "dev"]), 0)
         finally:
             os.chdir(cwd)
+
+
+class Reputation(Checking):
+    """The packages you name: fresh versions, new packages, new publishers, lookalike names, install scripts."""
+
+    def stamp(self, hours_ago):
+        return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - hours_ago * 3600))
+
+    def npm_doc(self, versions, created_hours_ago=24 * 400, scripts=None):
+        """versions: [(version, hours ago, publisher)], oldest first."""
+        return {"dist-tags": {"latest": versions[-1][0]},
+                "time": dict({"created": self.stamp(created_hours_ago)}, **{v: self.stamp(h) for v, h, _ in versions}),
+                "versions": {v: {"_npmUser": {"name": who}, "scripts": scripts or {}} for v, _, who in versions}}
+
+    def test_a_long_trusted_package_passes(self):
+        self.registry[si.NPM_REGISTRY + "chalk"] = self.npm_doc([("5.3.0", 9000, "sindre"), ("5.4.0", 2000, "sindre")])
+        self.check("npm", "install", "chalk")
+        self.assertEqual(self.risky, {})
+
+    def test_a_brand_new_release_by_a_new_publisher_is_flagged(self):
+        self.registry[si.NPM_REGISTRY + "chalk"] = self.npm_doc([("5.3.0", 9000, "sindre"), ("5.6.1", 5, "attacker")])
+        self.check("npm", "install", "chalk")
+        text = " ".join(self.risky["chalk"])
+        self.assertIn("published 5 hour", text)
+        self.assertIn("attacker, who never published", text)
+        self.assertIn("chalk", self.strong, "a new publisher on a fresh release asks first")
+
+    def test_a_fresh_release_of_an_established_package_only_informs(self):
+        self.registry[si.NPM_REGISTRY + "fastify"] = self.npm_doc([("4.0.0", 9000, "matteo"), ("4.1.0", 3, "matteo")])
+        self.check("npm", "install", "fastify")
+        self.assertIn("published 3 hour", " ".join(self.risky["fastify"]))
+        self.assertNotIn("fastify", self.strong)
+
+    def test_an_old_release_by_a_new_bot_account_is_fine(self):
+        self.registry[si.NPM_REGISTRY + "typescript"] = self.npm_doc([("5.0.0", 9000, "typescript-bot"), ("5.9.0", 24 * 90, "microsoft1es")])
+        self.check("npm", "install", "typescript")
+        self.assertEqual(self.risky, {})
+
+    def test_a_lookalike_name_with_few_downloads_is_flagged(self):
+        self.registry[si.NPM_REGISTRY + "expres"] = self.npm_doc([("1.0.0", 30, "x")], created_hours_ago=30,
+                                                                  scripts={"postinstall": "node setup.js"})
+        self.registry[si.NPM_DOWNLOADS + "expres"] = {"downloads": 12}
+        self.check("npm", "install", "expres")
+        text = " ".join(self.risky["expres"])
+        self.assertIn("looks like 'express'", text)
+        self.assertIn("1 day(s) old", text)
+        self.assertIn("expres", self.strong)
+        self.assertIn("install script (postinstall: node setup.js)", text)
+
+    def test_dependencies_are_not_looked_up_one_by_one(self):
+        lock = {"packages": {"node_modules/expres": {"version": "1.0.0"}}}
+        with open(os.path.join(self.dir, "package-lock.json"), "w") as f:
+            json.dump(lock, f)
+        self.check("npm", "install")
+        self.assertEqual(self.risky, {}, "only the packages you name get a reputation check")
+
+    def test_pypi_lookalike(self):
+        self.registry[si.PYPI_JSON + "reqeusts/json"] = {"info": {"version": "1.0"}, "releases": {"1.0": [{"upload_time_iso_8601": self.stamp(3000)}]}}
+        self.check("pip", "install", "reqeusts")
+        self.assertIn("looks like 'requests'", " ".join(self.risky["reqeusts"]))
+
+    def test_turning_lookups_off_skips_reputation(self):
+        self.registry[si.NPM_REGISTRY + "chalk"] = self.npm_doc([("5.6.1", 1, "attacker")])
+        self.check("npm", "install", "chalk", osv=False)
+        self.assertEqual(self.risky, {})
+
+    def test_typo_distance(self):
+        self.assertEqual(si.distance("reqeusts", "requests"), 1)            # a swap is one typo
+        self.assertEqual(si.lookalike("loadsh", "npm"), "lodash")
+        self.assertEqual(si.lookalike("react-dom", "npm"), None, "popular names are never lookalikes")
+        self.assertEqual(si.lookalike("my-company-utils", "npm"), None)
 
 
 @unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "needs bash")

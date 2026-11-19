@@ -21,6 +21,11 @@ Usage:
   github_check.py USERNAME [--days N] [--max-repos N] [--all-branches] [--json] [--rescan]
   github_check.py [USERNAME] --repo OWNER/NAME [--repo ...] [--json] [--rescan]
       a repository can be given as owner/name, a github.com URL or a git@github.com: address
+  github_check.py [USERNAME] --list --json
+      the repositories you can see, each marked as yours or shared with you (for choosing what to scan)
+
+  --owned-only   only your own and your organizations' repositories, not ones other people shared with you
+                 (by default every repository you can push to is checked: the worm spreads through all of them)
 
 Limits: every repository of the account is listed (all pages). An archive holds only the latest files of one branch,
 not the history, so it is much smaller than the repository size GitHub shows. Archives are streamed to a temporary file
@@ -141,7 +146,7 @@ class Client:
         if watchdog:
             watchdog.daemon = True
             watchdog.start()
-        size, problem = 0, None
+        size, problem, shown = 0, None, time.monotonic()
         try:
             with open(dest, "wb") as out:
                 while True:
@@ -159,6 +164,9 @@ class Client:
                         problem = f"download took longer than {DOWNLOAD_TIMEOUT // 60} minutes"
                         break
                     out.write(chunk)
+                    if time.monotonic() - shown > 2:              # a big archive takes minutes: show it moving
+                        shown = time.monotonic()
+                        progress("download", bytes=size)
         finally:
             if watchdog:
                 watchdog.cancel()
@@ -310,10 +318,10 @@ def save_seen(seen):
         pass
 
 
-def scan_branch(client, cr, repo, branch, result, maybe_empty=False):
+def scan_branch(client, cr, repo, branch, result, maybe_empty=False, shared=False):
     """Download one branch as an archive, scan it, delete it. Returns "clean", "found", "empty" or "error".
     Raises RateLimited, which ends the whole check."""
-    where = f"{repo} ({branch})"
+    where = f"{repo} ({branch}, shared with you)" if shared else f"{repo} ({branch})"   # not yours: someone else's repo
     tmp = tempfile.mkdtemp(prefix=TMP_PREFIX)
     archive, files = os.path.join(tmp, "archive.tar.gz"), os.path.join(tmp, "files")
     try:
@@ -369,6 +377,16 @@ def parse_repo(text):
     return name
 
 
+def progress(event, **kw):
+    """Live progress for the dashboard: one JSON object per line on stderr, only when ARDVANE_PROGRESS is set."""
+    if os.environ.get("ARDVANE_PROGRESS"):
+        try:
+            sys.stderr.write(json.dumps(dict(kw, event=event)) + "\n")
+            sys.stderr.flush()
+        except (OSError, ValueError):
+            pass
+
+
 def scan_repo(client, cr, repo, all_branches, result, seen):
     """Scan one repository - its default branch, or every branch - and remember it if clean.
     Returns "clean", "found" or "error". Raises RateLimited, which ends the whole check."""
@@ -382,16 +400,22 @@ def scan_repo(client, cr, repo, all_branches, result, seen):
         except RuntimeError as e:
             result["notes"].append(f"{name}: could not list branches ({e}), scanning the default branch only")
     outcomes = set()
-    for branch in branches:
-        outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not repo.get("size")))
+    # another person's repository you can push to (not yours, not an organization's): only its owner administers it
+    shared = (repo.get("owner") or {}).get("type") == "User" and (repo.get("permissions") or {}).get("admin") is False
+    for i, branch in enumerate(branches):
+        progress("branch", repo=name, branch=branch, done=i, total=len(branches))
+        outcomes.add(scan_branch(client, cr, name, branch, result, maybe_empty=not repo.get("size"), shared=shared))
         result["branches_scanned"] += 1
     if outcomes != {"error"}:
         result["scanned"].append(name)
     if outcomes <= {"clean", "empty"}:
         seen[name] = repo["pushed_at"] + ("|all" if all_branches else "")
+        progress("scanned", repo=name, outcome="clean", branches=len(branches), shared=shared)
         return "clean"
     seen.pop(name, None)                                  # keep re-checking until it's clean
-    return "found" if "found" in outcomes else "error"
+    outcome = "found" if "found" in outcomes else "error"
+    progress("scanned", repo=name, outcome=outcome, branches=len(branches), shared=shared)
+    return outcome
 
 
 def check_listed(client, cr, names, rescan, result, seen):
@@ -416,6 +440,7 @@ def check_listed(client, cr, names, rescan, result, seen):
         row["repo"] = name = repo.get("full_name") or name           # GitHub's spelling
         if not rescan and repo.get("pushed_at") and seen_ok(seen, repo, all_branches=True):
             row["outcome"] = "unchanged"
+            progress("scanned", repo=name, outcome="unchanged", branches=0)
             continue
         before = result["branches_scanned"]
         row["outcome"] = scan_repo(client, cr, repo, True, result, seen)
@@ -423,7 +448,7 @@ def check_listed(client, cr, names, rescan, result, seen):
         done.add(name.lower())
 
 
-def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos=()):
+def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos=(), owned_only=False):
     cr = load_checkrepo()
     remove_stale_temp()
     login = gh_login()
@@ -433,7 +458,7 @@ def check(user="", days=7, max_repos=15, rescan=False, all_branches=False, repos
     seen = load_seen()
     try:
         if user:
-            check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen)
+            check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen, owned_only)
         check_listed(client, cr, repos, rescan, result, seen)
     except RateLimited as e:
         result["notes"].append(f"stopped early: {e}")
@@ -461,20 +486,147 @@ def worm_repos(repos):
     return out
 
 
-def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen):
-    """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
+# ---------------------------------------------------------------------------------------------- account audit
+# Ways an attacker keeps access to an account after stealing a token. Only checked for the account `gh` is logged in
+# as, on repositories it administers; read-only.
+AUDIT_FILE = os.path.join(DEST, "github-audit.json")
+AUDIT_EVERY = 20 * 3600                    # once a day is enough: these change rarely, and each check costs requests
+AUDIT_MAX_REPOS = 100
+RECENT_DAYS = 30
+BAD_HOOK_RE = re.compile(r"webhook\.site|requestbin|pipedream\.net|ngrok|beeceptor|hookbin|\.workers\.dev|"
+                         r"discord(?:app)?\.com/api/webhooks|api\.telegram\.org|https?://\d{1,3}(?:\.\d{1,3}){3}", re.I)
+
+
+def _recent(when, now, days=RECENT_DAYS):
+    try:
+        return (now - parse_time(when)).days < days
+    except (TypeError, ValueError):
+        return False
+
+
+def _maybe(client, path):
+    """GET that treats 'not found' / 'not allowed' as nothing (the token may lack a scope); None then."""
+    try:
+        return client.get(path)
+    except RateLimited:
+        raise
+    except RuntimeError:
+        return None
+
+
+def audit_account(client, repos, result, now=None, force=False):
+    """Self-hosted runners, deploy keys, webhooks, pending invitations, SSH keys and force-push protection."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    cache = read_json(AUDIT_FILE, {})
+    if not force and cache and time.time() - cache.get("time", 0) < AUDIT_EVERY:
+        progress("phase", text="account audit: using today's result (it runs once a day)")
+        result["findings"] += [f for f in cache.get("findings", []) if isinstance(f, list) and len(f) == 3]
+        result["notes"] += cache.get("notes", [])
+        return
+    found, notes = [], []
+    owned = [r for r in repos if (r.get("permissions") or {}).get("admin") and not r.get("archived")][:AUDIT_MAX_REPOS]
+    def one(r):
+        """The checks for one repository: (findings, force-pushable?). Several run at once - the waiting is network."""
+        name, out = r["full_name"], []
+        runners = _maybe(client, f"/repos/{name}/actions/runners")
+        for run in (runners or {}).get("runners", []) if isinstance(runners, dict) else []:
+            label = str(run.get("name", ""))
+            if "hulud" in label.lower():
+                out.append(["DANGER", name, f"self-hosted runner '{label}' was registered by the Sha1-Hulud worm: remove it "
+                            "(Settings → Actions → Runners) and the runner folder on the computer it runs on"])
+            else:
+                out.append(["WARNING", name, f"self-hosted runner '{label}' ({run.get('os', '?')}, {run.get('status', '?')}): anyone who can "
+                            "push a workflow here runs code on that computer - remove it unless you set it up"])
+        for k in _maybe(client, f"/repos/{name}/keys") or []:
+            if isinstance(k, dict) and _recent(k.get("created_at"), now):
+                out.append(["WARNING", name, f"deploy key '{k.get('title', '?')}' was added on {str(k.get('created_at'))[:10]}"
+                            + ("" if k.get("read_only") else " with write access") + " - remove it unless you added it"])
+        for hk in _maybe(client, f"/repos/{name}/hooks") or []:
+            if not isinstance(hk, dict):
+                continue
+            url = str((hk.get("config") or {}).get("url", ""))
+            if BAD_HOOK_RE.search(url):
+                out.append(["WARNING", name, f"webhook sends every event to {url[:60]} - a common place to collect stolen data; delete it unless you set it up"])
+            elif _recent(hk.get("created_at"), now):
+                out.append(["WARNING", name, f"webhook to {url[:60]} was added on {str(hk.get('created_at'))[:10]} - check you added it"])
+        for inv in _maybe(client, f"/repos/{name}/invitations") or []:
+            if isinstance(inv, dict):
+                who = (inv.get("invitee") or {}).get("login", "?")
+                out.append(["WARNING", name, f"pending invitation for {who} to collaborate ({inv.get('permissions', '?')}) - cancel it unless you sent it"])
+        branch = r.get("default_branch") or "main"
+        rules = _maybe(client, f"/repos/{name}/rules/branches/{branch}")
+        open_ = False
+        if isinstance(rules, list) and not any(isinstance(x, dict) and x.get("type") == "non_fast_forward" for x in rules):
+            prot = _maybe(client, f"/repos/{name}/branches/{branch}/protection")
+            open_ = not (isinstance(prot, dict) and not (prot.get("allow_force_pushes") or {}).get("enabled"))
+        return out, open_
+
+    from concurrent.futures import ThreadPoolExecutor
+    unprotected = []
+    progress("phase", text=f"auditing {len(owned)} repositories you administer", total=len(owned))
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for i, (r, (out, open_)) in enumerate(zip(owned, pool.map(one, owned))):
+            found += out
+            if open_:
+                unprotected.append(r["full_name"])
+            progress("audited", repo=r["full_name"], done=i + 1, total=len(owned),
+                     outcome="found" if any(f[0] == "DANGER" for f in out) else "warn" if out else "clean",
+                     findings=[f[2][:120] for f in out][:3], force_push=open_)
+    for k in _maybe(client, "/user/keys") or []:
+        if isinstance(k, dict) and _recent(k.get("created_at"), now):
+            found.append(["WARNING", "your account", f"SSH key '{k.get('title', '?')}' was added on {str(k.get('created_at'))[:10]} - delete it "
+                          "(github.com/settings/keys) unless you added it"])
+    if unprotected:
+        notes.append(f"{len(unprotected)} of {len(owned)} repositories you administer let a stolen token force-push the default branch "
+                     f"(e.g. {', '.join(unprotected[:3])}) - add a ruleset that blocks force pushes")
+    if len([r for r in repos if (r.get('permissions') or {}).get('admin')]) > AUDIT_MAX_REPOS:
+        notes.append(f"the account audit covered the first {AUDIT_MAX_REPOS} repositories you administer")
+    write_json(AUDIT_FILE, {"time": time.time(), "findings": found, "notes": notes})
+    result["findings"] += found
+    result["notes"] += notes
+    result["audited"] = len(owned)
+
+
+def account_path(user, login, owned_only=False):
+    """The listing of an account's repositories: every one you can reach through gh, or only the public ones."""
     # sorted by name, not by push time: a push during the listing can't shift repositories between pages
     if login and login.lower() == user.lower():
-        path = "/user/repos?affiliation=owner,collaborator,organization_member&sort=full_name"
-    else:
-        path = f"/users/{user}/repos?type=owner&sort=full_name"
+        return "/user/repos?affiliation=owner,organization_member" + ("" if owned_only else ",collaborator") + "&sort=full_name"
+    return f"/users/{user}/repos?type=owner&sort=full_name"
+
+
+def list_repos(user=""):
+    """The repositories you can choose from: [{repo, owner, kind, private, pushed_at}], newest push first.
+    kind: "yours", "org" (an organization's) or "shared" (another person's, shared with you)."""
+    login = gh_login()
+    user = user or login
+    if not user:
+        raise RuntimeError("log in with `gh auth login`, or enter your GitHub username first")
+    client = Client(use_gh=bool(login))
+    rows = {}
+    for r in client.get_all(account_path(user, login)):
+        if isinstance(r, dict) and r.get("full_name"):
+            owner = (r.get("owner") or {}).get("login") or r["full_name"].split("/")[0]
+            kind = "yours" if owner.lower() == user.lower() else "org" if (r.get("owner") or {}).get("type") == "Organization" else "shared"
+            rows[r["full_name"].lower()] = {"repo": r["full_name"], "owner": owner, "kind": kind,
+                                            "private": bool(r.get("private")), "pushed_at": r.get("pushed_at") or ""}
+    return sorted(rows.values(), key=lambda x: x["pushed_at"], reverse=True)
+
+
+def check_account(client, cr, user, login, days, max_repos, rescan, all_branches, result, seen, owned_only=False):
+    """The account's recently pushed repositories, and the worm's signature: many pushed within one hour."""
+    path = account_path(user, login, owned_only)
+    if not (login and login.lower() == user.lower()):
         if login:
             result["notes"].append(f"gh is logged in as {login}, not {user}: only {user}'s public repositories are visible")
         else:
             result["notes"].append("public repositories only - log in with `gh auth login` to include private ones")
+    progress("phase", text=f"listing {user}'s repositories")
     repos = list({r["full_name"]: r for r in client.get_all(path) if isinstance(r, dict) and r.get("full_name")}.values())
     repos.sort(key=lambda r: r.get("pushed_at") or "", reverse=True)          # most recently pushed first
     result["repos"] = len(repos)
+    if login and login.lower() == user.lower() and getattr(client, "gh", None):   # your own account, through gh: the audit
+        audit_account(client, repos, result, force=rescan)
     for full, what in worm_repos(repos):
         result["findings"].append(["DANGER", full, f"repository created by a Shai-Hulud worm to publish stolen secrets ({what[:60]}). "
                                    "Your tokens and keys were stolen: rotate them all, then make this repository private and delete it"])
@@ -489,6 +641,7 @@ def check_account(client, cr, user, login, days, max_repos, rescan, all_branches
                                    "The worm pushes into many repositories at once - if this wasn't you, act now"])
 
     todo = [r for r in recent if rescan or not seen_ok(seen, r, all_branches)]
+    progress("phase", text=f"scanning {min(len(todo), max_repos)} recently pushed repositories", total=min(len(todo), max_repos))
     result["unchanged"] = len(recent) - len(todo)
     done = 0
     try:
@@ -533,7 +686,7 @@ def parse_args(argv):
         opts["user"] = positional[0].strip().lstrip("@")
         if not USER_RE.fullmatch(opts["user"]):
             raise ValueError(f"'{opts['user']}' is not a valid GitHub username")
-    if not opts["user"] and not opts["repos"]:
+    if not opts["user"] and not opts["repos"] and "--list" not in opts["flags"]:
         raise ValueError("name a GitHub username, or repositories with --repo owner/name")
     return opts
 
@@ -549,9 +702,23 @@ def main(argv):
         print(f"github_check: {e}", file=sys.stderr)
         return 3
     user, as_json, all_branches = o["user"], "--json" in o["flags"], "--all-branches" in o["flags"]
+    if "--list" in o["flags"]:
+        try:
+            rows = list_repos(user)
+        except (RuntimeError, ValueError) as e:
+            print(json.dumps({"error": str(e)}) if as_json else f"github_check: {e}", file=sys.stdout if as_json else sys.stderr)
+            return 3
+        if as_json:
+            print(json.dumps({"repos": rows}))
+        else:
+            for r in rows:
+                print(f"{r['repo']}{ {'yours': '', 'org': '  (organization)', 'shared': '  (shared with you)'}[r['kind']] }"
+                      f"{'  private' if r['private'] else ''}")
+        return 0
     what = user or ", ".join(o["repos"])
     try:
-        res = check(user, o["days"], o["max_repos"], "--rescan" in o["flags"], all_branches, o["repos"])
+        res = check(user, o["days"], o["max_repos"], "--rescan" in o["flags"], all_branches, o["repos"],
+                    owned_only="--owned-only" in o["flags"])
     except (RuntimeError, ValueError) as e:
         if as_json:
             print(json.dumps({"user": user, "repos_listed": o["repos"], "error": str(e)}))

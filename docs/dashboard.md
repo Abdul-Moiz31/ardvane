@@ -117,10 +117,17 @@ Every repository you can reach is listed, not only the first 100. There is no fi
 the latest files of one branch (much less than the repository size GitHub shows), is streamed to disk, and stops only
 if less than 2 GB of disk space would be left. Files over 20 MB (videos, models, datasets) are listed as not scanned.
 
+**Which repositories.** By default every repository you can push to is covered: yours, your organizations' and
+repositories other people shared with you - the worm spreads through all of them. Choose **Mine and my
+organizations'** to leave out repositories other people shared with you (`--owned-only` for `github_check.py`).
+While a scan runs, the Scan page shows the GitHub check live: each repository as it is audited and each branch as it
+is scanned, with how much of a big repository has been downloaded.
+
 **Repositories to scan.** In **Settings → GitHub** you can also list repositories one by one - yours, your
 organization's or a teammate's, any repository your GitHub login can read - as `owner/name`, a github.com link or a
 `git@github.com:` address. Every branch of each one is scanned with each scan and daily check, however long ago it was
-pushed, and you can remove them again like folders. This works without a username too. A listed repository that can't
+pushed, and you can remove them again like folders. **Choose from my GitHub repositories** lists every repository
+you can see - grouped as yours, organizations' and shared with you - to search and tick instead of typing names. This works without a username too. A listed repository that can't
 be checked (a typo, or no access) is shown as a warning, never as clean.
 
 If the [GitHub CLI](https://cli.github.com) is installed and logged in (`gh auth login`), private repositories are

@@ -3,6 +3,36 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.10.0
+
+**Ardvane now looks through a repository's whole history, cleans malware out of it, audits your GitHub account,
+checks a package's reputation before you install it, and the daily check can finally cover your Documents folder.**
+
+- **History.** A new History page (and `ardvane history scan`) checks every version of every file on every branch, tag
+  and commit of a local repository or a GitHub repository, and says whether malware is in a branch's current files or
+  only in older commits. A GitHub repository is downloaded with its history into a temporary folder and deleted after.
+- **Clean history.** For a repository you administer, Ardvane prepares a clean history: a complete backup first, then
+  every commit on every branch and tag rewritten - files that are only malware are left out, your own files lose only
+  the injected part - and the result is checked again. You see what changes on each branch; nothing is pushed until
+  you type the repository's name. The push is refused if anyone pushed in the meantime. No extra tools needed.
+- **GitHub account audit** (with the GitHub CLI logged in, once a day): self-hosted runners (DANGER for the
+  Sha1-Hulud worm's), deploy keys and SSH keys added in the last 30 days, webhooks to data-collection services,
+  pending collaborator invitations, and repositories a stolen token could force-push.
+  The Scan page shows the GitHub check live: each repository as it's audited, each branch as it's scanned (with how much of a
+  big repository is downloaded so far), and the result for each.
+  Repositories other people shared with you are labelled "shared with you".
+- **Choose which GitHub repositories are checked.** Settings > GitHub: every repository you can push to (the default -
+  the worm spreads through all of them), or only yours and your organizations'. **Choose from my GitHub
+  repositories** lists them all - yours, your organizations' and ones shared with you - to search and tick the ones
+  scanned on every branch, instead of typing their names.
+- **Package reputation before installing.** For the packages you name, safe install now also checks the npm registry
+  or PyPI: a package created this week, a release by someone who never published the package before, or a name one
+  typo away from a popular package (`raect`, `reqeusts`) make it ask before installing. A brand-new release of an
+  established package and install scripts are shown.
+- **The daily check can read Documents, Desktop and Downloads.** With the Ardvane app installed, the daily check runs
+  as the app, so macOS asks once whether Ardvane may read those folders - instead of advising Full Disk Access for
+  every shell script. The Overview's **Allow access** asks right away.
+
 ## 0.9.0
 
 - **Update Ardvane from the dashboard.** When a new version is out, the Overview says so, with what's new. **Update**

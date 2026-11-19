@@ -65,8 +65,45 @@ def _mac():
         info["CFBundleIconFile"] = "AppIcon"
     with open(os.path.join(bundle, "Contents", "Info.plist"), "wb") as f:
         plistlib.dump(info, f)
+    _daily_helper(bundle)
+    run(["codesign", "--force", "--sign", "-", bundle], timeout=60)      # a stable identity for macOS privacy settings
     run(["touch", bundle], timeout=10)          # make Finder pick up the icon
     return 0, f"Added {APP_NAME} to your Applications folder. Open it from Launchpad, or press ⌘ Space and type {APP_NAME}."
+
+
+DAILY_HELPER = "Ardvane Daily Check.app"
+
+
+def daily_helper_path():
+    return os.path.join(path(), "Contents", "Helpers", DAILY_HELPER)
+
+
+def _daily_helper(bundle):
+    """A small app that runs the daily check, so macOS can ask once whether *it* may read Documents, Desktop and
+    Downloads. It has to be a compiled program: a shell script is attributed to /bin/sh, which macOS never asks about
+    (it just denies). osacompile, part of macOS, makes one; it runs the check and waits for it, without a Dock icon."""
+    helper = os.path.join(bundle, "Contents", "Helpers", DAILY_HELPER)
+    shutil.rmtree(helper, ignore_errors=True)
+    os.makedirs(os.path.dirname(helper), exist_ok=True)
+    script = ('do shell script "/bin/bash " & quoted form of (POSIX path of (path to home folder) & ".checkrepo/daily-check.sh")'
+              ' & " >/dev/null 2>&1; exit 0"')
+    if run(["osacompile", "-o", helper, "-e", script], timeout=60)[0] != 0:
+        return False
+    info_path = os.path.join(helper, "Contents", "Info.plist")
+    with open(info_path, "rb") as f:
+        info = plistlib.load(f)
+    info.update({"CFBundleIdentifier": "dev.ardvane.daily-check", "CFBundleName": "Ardvane Daily Check",
+                 "CFBundleDisplayName": "Ardvane Daily Check", "LSUIElement": True})
+    with open(info_path, "wb") as f:
+        plistlib.dump(info, f)
+    if os.path.isfile(os.path.join(resources_of(bundle), "AppIcon.icns")):
+        shutil.copy2(os.path.join(resources_of(bundle), "AppIcon.icns"), os.path.join(helper, "Contents", "Resources", "applet.icns"))
+    run(["codesign", "--force", "--sign", "-", helper], timeout=60)
+    return True
+
+
+def resources_of(bundle):
+    return os.path.join(bundle, "Contents", "Resources")
 
 
 def _windows():

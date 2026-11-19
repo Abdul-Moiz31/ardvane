@@ -29,6 +29,9 @@ USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads throug
   {PROG} unprotect                    remove protection and restore your previous settings
   {PROG} fixes [list | history | fix ID | undo ID]
                                        fixes Ardvane can make for you, with undo
+  {PROG} history scan FOLDER|OWNER/NAME  check every commit, branch and tag of a repository for malware
+  {PROG} history clean OWNER/NAME     prepare a clean history (backup + rewrite + check); nothing is pushed
+  {PROG} history push WORKDIR         push a prepared clean history (refused if anyone pushed meanwhile)
   {PROG} launcher [--remove]          add (or remove) the app icon
   {PROG} --version
 
@@ -53,7 +56,7 @@ def running_instance():
 def _watchdog():
     while True:
         time.sleep(15)
-        scanning = App.job is not None and App.job.finished is None
+        scanning = (App.job is not None and App.job.finished is None) or (App.hjob is not None and App.hjob.finished is None)
         if not scanning and not App.busy and time.time() - App.last_seen > IDLE_LIMIT:
             App.httpd.shutdown()
             return
@@ -141,6 +144,7 @@ COMMANDS = {
     "protect": lambda a: _call(actions.installer_command("install", "--dry-run" in a)),
     "unprotect": lambda a: _call(actions.installer_command("uninstall")),
     "fixes": lambda a: _scanner("autofix.py", a or ["list"]),
+    "history": lambda a: _scanner("history.py", a or ["--help"]),
     "launcher": lambda a: print((launcher.remove() if "--remove" in a else launcher.install())[1]) or 0,
 }
 
