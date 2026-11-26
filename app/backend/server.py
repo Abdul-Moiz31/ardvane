@@ -480,8 +480,10 @@ def post_github_issue(b):
 
 
 def get_sandbox(q):
-    exe, ready, message = tools.sandbox_runtime()
-    return {"runtime": exe, "ready": ready, "message": message, "os": OS_NAME}
+    sb = kit.module("sandbox")
+    exe, ready, message = tools.sandbox_runtime(fresh=bool(q.get("fresh")))
+    return {"runtime": exe, "ready": ready, "message": message, "os": OS_NAME, "can_start": bool(exe and sb.start_command(exe)),
+            "links": [list(l) for l in sb.INSTALL_LINKS]}
 
 
 def post_sandbox(b):
@@ -491,6 +493,9 @@ def post_sandbox(b):
     except ValueError as e:
         raise ApiError(400, str(e))
     shown = " ".join(argv[-3:] if argv[0] != "ardvane" else argv)
+    exe, ready, message = tools.sandbox_runtime(fresh=True)
+    if not exe:                                   # nothing to start: say where to get one (the terminal would only say the same)
+        return {"launched": False, "needs": "install", "message": message, "links": [list(l) for l in kit.module("sandbox").INSTALL_LINKS]}
     if not tools.open_in_terminal(argv):
         return {"launched": False, "command": shown}
     return {"launched": True, "command": shown, "kind": kind}

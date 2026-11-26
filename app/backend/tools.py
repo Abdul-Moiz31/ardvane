@@ -42,9 +42,9 @@ class ReportJob:
 _runtime = {"at": 0.0, "value": (None, False, "")}
 
 
-def sandbox_runtime():
+def sandbox_runtime(fresh=False):
     """(docker | podman | None, ready, message), remembered for a minute: asking the engine takes a second."""
-    if time.time() - _runtime["at"] > 60:
+    if fresh or time.time() - _runtime["at"] > 60:
         _runtime["value"], _runtime["at"] = kit.module("sandbox").runtime(), time.time()
     return _runtime["value"]
 

@@ -630,6 +630,21 @@ class NewTools(unittest.TestCase):
         kind, spec, argv = tools.sandbox_command("owner/name")
         self.assertEqual((kind, spec, argv[-2:]), ("github", "owner/name", ["sandbox", "owner/name"]))
         self.assertIn("ready", s.get_sandbox({}))
+        real = tools.sandbox_runtime
+        try:                                                                     # nothing installed: no terminal, links to install
+            tools.sandbox_runtime = lambda fresh=False: (None, False, "needs Docker or Podman")
+            out = s.post_sandbox({"target": "owner/name"})
+            self.assertEqual((out["launched"], out["needs"]), (False, "install"))
+            self.assertTrue(any("docker.com" in l[1] for l in out["links"]))
+            opened = []
+            real_open = tools.open_in_terminal
+            tools.open_in_terminal = lambda argv: opened.append(argv) or True
+            tools.sandbox_runtime = lambda fresh=False: ("docker", False, "not running")     # installed, stopped: the terminal starts it
+            self.assertTrue(s.post_sandbox({"target": "owner/name"})["launched"])
+            self.assertEqual(opened[0][-2:], ["sandbox", "owner/name"])
+            tools.open_in_terminal = real_open
+        finally:
+            tools.sandbox_runtime = real
 
     def test_secrets_listing(self):
         res = self.server.get_secrets({})

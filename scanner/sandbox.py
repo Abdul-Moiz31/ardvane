@@ -3,7 +3,7 @@
 
 Part of Ardvane (MIT License). Python 3.8+, no dependencies. Needs Docker or Podman.
 
-  sandbox.py TARGET [--image IMAGE] [--no-network] [--force] [--dry-run]
+  sandbox.py TARGET [--image IMAGE] [--no-network] [--no-start] [--force] [--dry-run]
 
 TARGET is owner/name (or a github.com link), or a folder on this computer.
 
@@ -15,6 +15,9 @@ What happens:
   3. The code goes in: a GitHub repository is cloned INSIDE the container (hooks off, shallow, no submodules); a folder
      is copied in. You get a shell in it. Run the test there.
   4. When you leave the shell, the container and everything in it is deleted.
+
+If Docker (or Podman) is installed but not running, it is started for you and waited for (--no-start to not do that).
+If neither is installed, it says where to get one. The first run downloads the image once (about 1.6 GB for the default).
 
 --no-network cuts the container off from the network (folders only: a clone needs it). Without it, `npm install` works.
 
@@ -29,6 +32,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kitlib import safe_output  # noqa: E402
@@ -55,8 +59,60 @@ def runtime():
         if r.returncode == 0:
             return exe, True, ""
         return exe, False, f"{exe} is installed but not running: start it (Docker Desktop, OrbStack or Colima), then try again"
-    return None, False, ("needs Docker or Podman, and found neither. Install one (Docker Desktop, OrbStack, Colima or Podman), "
-                         "start it, then run this again")
+    return None, False, INSTALL_HELP
+
+
+INSTALL_LINKS = [("Docker Desktop", "https://www.docker.com/products/docker-desktop/"), ("Podman", "https://podman.io/docs/installation")]
+INSTALL_HELP = ("needs Docker or Podman, and found neither. Install one (" + " or ".join(f"{n}: {u}" for n, u in INSTALL_LINKS) +
+                "), then run this again: Ardvane starts it for you from then on")
+
+
+def start_command(exe, system=None, exists=os.path.exists):
+    """The command that starts the container engine on this computer, or None when it can't be started from here.
+    macOS: Docker Desktop or OrbStack (whichever is installed), Colima, or the Podman machine. Windows: Docker Desktop.
+    Linux: engines are services started with systemctl, which needs admin rights: not done for you."""
+    system = system or sys.platform
+    if exe == "podman":
+        return ["podman", "machine", "start"] if system in ("darwin", "win32") else None
+    if system == "darwin":
+        for app in ("Docker", "OrbStack"):
+            if exists(f"/Applications/{app}.app") or exists(os.path.expanduser(f"~/Applications/{app}.app")):
+                return ["open", "-a", app]
+        return ["colima", "start"] if shutil.which("colima") else None
+    if system == "win32":
+        for base in (os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("LOCALAPPDATA", "")):
+            path = os.path.join(base, "Docker", "Docker", "Docker Desktop.exe") if base else ""
+            if path and exists(path):
+                return [path]
+    return None
+
+
+def start_engine(exe, wait=240, emit=print):
+    """Start the engine and wait until it answers. Returns (ready, message)."""
+    cmd = start_command(exe)
+    if not cmd:
+        return False, (f"{exe} is installed but not running, and Ardvane can't start it on this computer: start it yourself "
+                       "(on Linux: sudo systemctl start docker), then run this again")
+    emit(f"{exe} is not running. Starting it ({cmd[0] if cmd[0] != 'open' else cmd[-1]})… this can take a minute.")
+    try:
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        return False, f"could not start {exe}: {e}"
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        time.sleep(3)
+        exe2, ready, _ = runtime()
+        if ready:
+            emit(f"{exe2} is ready.")
+            return True, ""
+    return False, f"{exe} did not become ready within {wait // 60} minutes: open it yourself, wait for it to say it is running, then try again"
+
+
+def image_present(exe, image):
+    try:
+        return subprocess.run([exe, "image", "inspect", image], capture_output=True, timeout=30, stdin=subprocess.DEVNULL).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return True                 # can't tell: say nothing rather than something wrong
 
 
 def parse_target(text):
@@ -117,7 +173,7 @@ def precheck(kind, target):
     return True, ""
 
 
-def open_sandbox(target, image=DEFAULT_IMAGE, network=True, force=False, dry_run=False):
+def open_sandbox(target, image=DEFAULT_IMAGE, network=True, force=False, dry_run=False, start=True):
     """Run the whole flow. Returns an exit code."""
     kind, spec = parse_target(target)
     if kind == "github" and not network:
@@ -129,6 +185,8 @@ def open_sandbox(target, image=DEFAULT_IMAGE, network=True, force=False, dry_run
         for what, argv in steps:
             print(f"{what}: " + " ".join(argv))
         return 0
+    if not ready and exe and start:
+        ready, why = start_engine(exe)
     if not ready:
         print(f"sandbox: {why}", file=sys.stderr)
         return 3
@@ -136,6 +194,8 @@ def open_sandbox(target, image=DEFAULT_IMAGE, network=True, force=False, dry_run
     if not ok and not force:
         print(f"sandbox: {message}", file=sys.stderr)
         return 1
+    if image == DEFAULT_IMAGE and not image_present(exe, image):
+        print("First run on this computer: downloading the sandbox image (about 1.6 GB). This happens once.")
     print(f"Opening {spec} in a throwaway container ({image}). Nothing of your computer is shared with it.")
     code = 0
     try:
@@ -172,7 +232,7 @@ def main(argv):
         print("sandbox: give exactly one repository (owner/name) or folder", file=sys.stderr)
         return 3
     try:
-        return open_sandbox(args[0], image, "--no-network" not in flags, "--force" in flags, "--dry-run" in flags)
+        return open_sandbox(args[0], image, "--no-network" not in flags, "--force" in flags, "--dry-run" in flags, "--no-start" not in flags)
     except ValueError as e:
         print(f"sandbox: {e}", file=sys.stderr)
         return 3

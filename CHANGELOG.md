@@ -18,7 +18,9 @@ Each version's section becomes its GitHub release notes automatically. To releas
 - **Open safely (Protection page, `ardvane sandbox owner/name`).** Scans a coding test first, then opens it in a throwaway
   Docker or Podman container that shares none of your files, keys or environment (all capabilities dropped, memory,
   CPU and process limits), clones inside the container with git hooks off, and deletes the container when you leave.
-  Nothing is opened if malware is found.
+  Nothing is opened if malware is found. If Docker (or Podman) is installed but not running, Ardvane starts it and
+  waits for it (macOS: Docker Desktop, OrbStack, Colima; Windows: Docker Desktop); if neither is installed it says where
+  to get one. The first run downloads the image once (about 1.6 GB).
 - **Secrets page (`ardvane secrets`).** Finds credentials sitting in plain text files (AWS keys, GitHub CLI token, npm,
   Docker, git, PyPI, Kubernetes, Google Cloud), shows how long ago each file changed and walks you off them step by
   step: SSO or the keychain first, the old key last. It never shows a secret and never edits those files.

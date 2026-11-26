@@ -70,23 +70,37 @@ function sandboxCard() {
   const input = /** @type {HTMLInputElement} */ (h('input', { type: 'text', class: 'grow', 'aria-label': 'Repository or folder to open safely',
     placeholder: 'owner/name of a coding test, or a folder', value: S.sandboxDraft || '' }));
   input.addEventListener('input', () => { S.sandboxDraft = input.value; });
-  const ready = !!(sb && sb.ready);
   const open = button('Open safely', () => busy(open, async () => {
     const target = input.value.trim();
-    if (!target) return;
+    if (!target) { toast('Type a repository (owner/name) or choose a folder first', 'danger'); return; }
     try {
       const r = await api('/api/sandbox', { target });
-      if (r.launched) toast('Opened in a terminal window: it scans first, then starts the container');
+      if (r.needs === 'install') installModal(r);
+      else if (r.launched) toast(sb && sb.ready ? 'Opened in a terminal window: it scans first, then starts the container'
+        : 'Opened in a terminal window: it starts Docker, scans, then starts the container');
       else modal('Run this in a terminal', [h('p', { text: 'Ardvane could not open a terminal window itself. Run:' }), h('pre', { text: r.command })], [button('Close', () => closeModal(), 'btn-primary')]);
     } catch (e) { showError(e); }
-  }), 'btn-primary', 'package', ready ? undefined : { disabled: '' });
+  }), 'btn-primary', 'package');
   const choose = button('Choose folder…', async () => {
     try { const r = await api('/api/pick-folder', {}); if (r.path) { S.sandboxDraft = r.path; rerender(); } } catch (e) { showError(e); }
   }, '', 'folder');
+  const ready = !!(sb && sb.ready);
   const status = !sb ? null : ready ? pill('ok', sb.runtime === 'podman' ? 'Podman ready' : 'Docker ready', 'check')
-    : pill('warn', sb.runtime ? 'Not running' : 'Not installed', 'alert');
+    : sb.runtime ? pill('warn', sb.can_start ? 'Not running' : 'Not running', 'alert') : pill('warn', 'Not installed', 'alert');
+  const note = !sb ? '' : ready ? 'From a terminal: ardvane sandbox owner/name'
+    : sb.runtime ? (sb.can_start ? 'Docker isn\'t running. Open safely starts it for you, then continues.' : sb.message)
+    : 'Docker or Podman is needed. Open safely shows where to get one.';
+  const again = button('Check again', async () => { try { S.sandbox = await api('/api/sandbox?fresh=1'); rerender(); } catch (e) { showError(e); } }, 'btn-sm btn-ghost', 'refresh');
   return card('Open a coding test safely', 'package', h('div', { class: 'card-pad stack' },
-    h('p', { class: 'help', text: 'A take-home test can run code the moment you open it. This scans it first, then opens it in a throwaway container that shares none of your files, keys or environment, and deletes the container when you leave. Run the test in there.' }),
+    h('p', { class: 'help', text: 'A take-home test can run code the moment you open it. This scans it first, then opens it in a throwaway container that shares none of your files, keys or environment, and deletes the container when you leave. Run the test in there. The first time downloads a one-off image of about 1.6 GB.' }),
     h('div', { class: 'row' }, input, choose, open),
-    h('div', { class: 'row' }, status, sb && !ready && sb.message ? h('span', { class: 'help', text: sb.message }) : h('span', { class: 'help', text: 'From a terminal: ardvane sandbox owner/name' }))));
+    h('div', { class: 'row' }, status, h('span', { class: 'help', text: note }), again)));
+}
+
+/** @param {any} r */
+function installModal(r) {
+  modal('Docker or Podman is needed', [
+    h('p', { text: 'The sandbox runs the test in a container, and neither Docker nor Podman is installed on this computer. Install one, then press Open safely again: from then on Ardvane starts it for you when it isn\'t running.' }),
+    h('div', { class: 'row' }, (r.links || []).map(/** @param {string[]} l */ l => h('a', { class: 'btn', href: l[1], target: '_blank', rel: 'noopener' }, icon('code'), l[0])))],
+    [button('Close', () => closeModal(), 'btn-primary')]);
 }

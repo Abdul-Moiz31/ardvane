@@ -184,6 +184,57 @@ class Sandbox(unittest.TestCase):
             sb.open_sandbox("owner/name", network=False, dry_run=True)
 
 
+class SandboxEngine(unittest.TestCase):
+    """Docker installed but not running is started for you; nothing installed says where to get it."""
+
+    def test_which_engine_command_is_used_on_each_system(self):
+        mac = lambda p: p == "/Applications/OrbStack.app"
+        self.assertEqual(sb.start_command("docker", "darwin", lambda p: p == "/Applications/Docker.app"), ["open", "-a", "Docker"])
+        self.assertEqual(sb.start_command("docker", "darwin", mac), ["open", "-a", "OrbStack"])
+        self.assertEqual(sb.start_command("podman", "darwin"), ["podman", "machine", "start"])
+        self.assertIsNone(sb.start_command("docker", "linux"), "starting a service needs admin rights: not done for you")
+
+    def test_a_stopped_engine_is_started_and_waited_for(self):
+        real = (sb.runtime, sb.start_command, sb.subprocess.Popen, sb.time.sleep)
+        started, answers, said = [], iter([("docker", False, "x"), ("docker", False, "x"), ("docker", True, "")]), []
+        sb.start_command = lambda exe, *a, **k: ["open", "-a", "Docker"]
+        sb.subprocess.Popen = lambda cmd, **k: started.append(cmd)
+        sb.time.sleep = lambda s: None
+        sb.runtime = lambda: next(answers)
+        try:
+            ready, why = sb.start_engine("docker", emit=said.append)
+        finally:
+            sb.runtime, sb.start_command, sb.subprocess.Popen, sb.time.sleep = real
+        self.assertEqual((ready, why), (True, ""))
+        self.assertEqual(started, [["open", "-a", "Docker"]])
+        self.assertTrue(any("Starting" in m for m in said) and any("ready" in m for m in said))
+
+    def test_an_engine_that_never_comes_up_is_reported_not_waited_for_forever(self):
+        real = (sb.runtime, sb.start_command, sb.subprocess.Popen, sb.time.sleep)
+        sb.start_command = lambda exe, *a, **k: ["open", "-a", "Docker"]
+        sb.subprocess.Popen = lambda cmd, **k: None
+        sb.time.sleep = lambda s: None
+        sb.runtime = lambda: ("docker", False, "x")
+        try:
+            ready, why = sb.start_engine("docker", wait=0, emit=lambda m: None)
+        finally:
+            sb.runtime, sb.start_command, sb.subprocess.Popen, sb.time.sleep = real
+        self.assertFalse(ready)
+        self.assertIn("did not become ready", why)
+
+    def test_nothing_installed_says_where_to_get_it_and_opens_nothing(self):
+        real = sb.runtime
+        sb.runtime = lambda: (None, False, sb.INSTALL_HELP)
+        err = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(sb.open_sandbox("owner/name"), 3)
+        finally:
+            sb.runtime = real
+        self.assertIn("docker.com", err.getvalue())
+        self.assertIn("podman.io", err.getvalue())
+
+
 class Credentials(unittest.TestCase):
     def home(self, files):
         home = tempfile.mkdtemp(prefix="creds-")
