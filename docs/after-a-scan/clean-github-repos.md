@@ -69,8 +69,8 @@ The author had ~150 infected repositories (own repos, forks, organization repos)
 
 ## After cleaning
 
-- [ ] **Protect branches** (repo Settings → Rules → Rulesets): block force pushes on all branches, block deletion of the
-      default branch, require signed commits. On the free plan this works for public repos; private repos need GitHub Pro.
+- [ ] **Protect branches**: Ardvane's **GitHub** page (or `ardvane branches protect --all`) adds a ruleset that blocks force pushes and deleting the default branch to every repository you administer, and can undo it. By hand: repo Settings → Rules → Rulesets: block force pushes on all branches, block deletion of the
+      default branch, require signed commits. On the free plan this works for public repos; private repos need GitHub Pro. (A clean-up is itself a force push: take the ruleset off before pushing a cleaned history, and put it back after.)
 - [ ] **Re-clone** your local copies from GitHub. Old local copies still contain the infected history.
 - [ ] **Pull-request refs can't be rewritten.** GitHub keeps a read-only copy of every pull request (`refs/pull/*`) that may
       still point at infected commits. Normal clones don't download them, but to remove them completely, contact

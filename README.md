@@ -80,6 +80,10 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 | `ardvane protect` | Turn on protection (`--dry-run` shows every change first) |
 | `ardvane unprotect` | Remove protection and restore your previous settings |
 | `ardvane fixes` | What Ardvane can fix for you, with undo |
+| `ardvane branches protect --all` | Block force pushes to your repositories with a GitHub ruleset (`list`, `undo` too) |
+| `ardvane report-owner <owner/repo>` | Scan a repository shared with you and write the report its owner needs |
+| `ardvane sandbox <owner/repo or folder>` | Open a coding test in a throwaway container, after scanning it |
+| `ardvane secrets` | Find credentials in plain text files and see how to move off them |
 | `ardvane --help` | Everything else |
 
 The scan ends with **CLEAN**, **worth a look** or **INFECTED**, says exactly what to do next, and saves a report.
@@ -114,8 +118,12 @@ and on Windows (beta) the matching `.ps1` files in `windows/`.
 | **To-do list** | Every finding becomes a short checklist; a real infection opens the recovery checklist; a later scan checks that your fix worked |
 | **Safe install** | `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` check every package an install would add against known malware (Ardvane's list plus OSV.dev's malicious-package database), and ask first about a package created this week, a release by a first-time publisher, or a name one typo from a popular package |
 | **GitHub check** | Audits your account (self-hosted runners, new deploy keys and SSH keys, suspicious webhooks, pending invitations, repositories a stolen token could force-push), warns about many repos pushed at once and scans recently pushed repos, plus every branch of any repos you choose. Shown live while a scan runs. The dashboard offers to turn it on when the GitHub CLI is signed in; your token stays in the GitHub CLI |
+| **Block force pushes** | One click adds a GitHub ruleset to each of your repositories a stolen token could force-push: no force pushes, no deleting the default branch, undo any time |
+| **Tell the owner** | For a repository shared with you that carries malware: scans every branch and writes the report its owner needs, to copy, save or open as an issue |
+| **Open safely** | Scans a coding test, then opens it in a throwaway container that shares none of your files or keys, and deletes it when you leave (Docker or Podman) |
+| **Secrets** | Finds AWS, npm, GitHub CLI, Docker, git and other credentials in plain text files and walks you off them, step by step. Never shows or edits a secret |
 | **Daily check** | Runs at the time you choose, notices if malware switched your protection off, and shows a notification. On macOS it runs through the Ardvane app so you can allow Documents, Desktop and Downloads once |
-| **GitHub Action** | The same scanner on every push and pull request, and every branch every night, for teammates and branches nobody opens locally: `uses: Abdul-Moiz31/ardvane@v0.11.3` ([how](docs/github-action.md)) |
+| **GitHub Action** | The same scanner on every push and pull request, and every branch every night, for teammates and branches nobody opens locally: `uses: Abdul-Moiz31/ardvane@v0.12.0` ([how](docs/github-action.md)) |
 | **Guides** | Every attack explained, and step-by-step recovery: cut off access, clean repositories, rotate secrets, harden |
 
 <a id="how-it-protects-you"></a>
@@ -162,7 +170,7 @@ The scanner was built from **real malware files** taken from an actual infection
 | 18 popular open-source projects, 106,225 files (Font-Awesome, Babel, Webpack, Prettier, javascript-obfuscator…) | **0 false alarms** |
 | A developer's 14 real projects + all installed packages, ~240,000 files | **0 false alarms** · 1 real infection leftover found |
 | Ardvane scanned by itself: its source, the pip-installed copy and its own records | **0 alarms**, checked on every change |
-| Automated tests: scanner, fixer (incl. attempts to trick it), history clean-up, dashboard security, GitHub check | **195 unit tests and 143 detection checks**, run on macOS, Linux and Windows on every change, plus a build-and-install test of the package |
+| Automated tests: scanner, fixer (incl. attempts to trick it), history clean-up, dashboard security, GitHub check | **221 unit tests and 143 detection checks**, run on macOS, Linux and Windows on every change, plus a build-and-install test of the package |
 
 **Honest limits:** Ardvane targets this family of attacks, so a completely new technique may not be detected. That's
 why it also hardens your editor, npm, git and GitHub and checks every day. Windows support is beta: the scripts pass their tests on Windows in CI, but they have had far less real-world use than macOS, so reports are very welcome. A scan can't

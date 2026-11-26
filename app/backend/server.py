@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, detections, docs, fixes, historyjob, kit, launcher, reports, settings, status, tasks, updates
+from . import actions, detections, docs, fixes, historyjob, kit, launcher, reports, settings, status, tasks, tools, updates
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, DEST, HOME, IS_MAC, KIT, OS_NAME, ROUTINE_LABEL, UI, VERSION
 from .system import kit_env, python_exe, run
 from .scanjob import ScanJob
@@ -38,6 +38,7 @@ class App:
     port = 0
     job = None
     hjob = None                 # history scan / cleanup (historyjob.HistoryJob)
+    rjob = None                 # report for a repository's owner (tools.ReportJob)
     busy = 0
     last_seen = time.time()
     lock = threading.Lock()
@@ -407,6 +408,98 @@ def get_github_repos(q):
     return {"repos": data["repos"][:1000]}
 
 
+def _protect_module():
+    return kit.module("github_protect")
+
+
+def get_github_branches(q):
+    """Repositories the last GitHub audit found open to force pushes, and the ones Ardvane has protected since."""
+    gp = _protect_module()
+    cache = kit.module("github_check").read_json(kit.module("github_check").AUDIT_FILE, {})
+    return {"gh": bool(_gh_login()), "audited": cache.get("time"), "exposed": gp.exposed(),
+            "protected": [dict(repo=k, **v) for k, v in gp.protected().items()]}
+
+
+def post_github_branches(b):
+    """Block force pushes on repositories the audit listed (or take Ardvane's ruleset off). Only listed repositories are accepted."""
+    gp = _protect_module()
+    action = b.get("action")
+    if action not in ("protect", "undo"):
+        raise ApiError(400, "bad action")
+    allowed = {r["repo"].lower(): r["repo"] for r in (gp.exposed() if action == "protect" else [{"repo": k} for k in gp.protected()])}
+    asked = [r["repo"] for r in gp.exposed()] if b.get("all") and action == "protect" else [str(r) for r in b.get("repos") or []]
+    chosen = [allowed[r.lower()] for r in asked if r.lower() in allowed]
+    if not chosen:
+        raise ApiError(400, "none of these repositories is in the list from the last GitHub check")
+    if not _gh_login():
+        raise ApiError(400, "the GitHub CLI isn't signed in: run `gh auth login` in a terminal first")
+    with App.lock:
+        if App.busy:
+            raise ApiError(409, "another change is still running")
+        App.busy += 1
+    try:
+        results = gp.run(action, chosen)
+    except (RuntimeError, ValueError) as e:
+        raise ApiError(400, str(e))
+    finally:
+        with App.lock:
+            App.busy -= 1
+    return {"results": results, **get_github_branches({})}
+
+
+def get_github_report(q):
+    return {"job": App.rjob.state() if App.rjob else None}
+
+
+def post_github_report(b):
+    """Scan one repository and write the report for its owner (nothing is sent anywhere)."""
+    if App.rjob and App.rjob.finished is None:
+        raise ApiError(409, "a report is still being prepared")
+    try:
+        repo = kit.module("github_check").parse_repo(b.get("repo", ""))
+    except ValueError as e:
+        raise ApiError(400, str(e))
+    App.rjob = tools.ReportJob(repo)
+    return {"job": App.rjob.state()}
+
+
+def post_github_issue(b):
+    """Open the prepared report as an issue. Needs the repository name typed again: an issue on a public repository is public."""
+    job = App.rjob
+    if not job or not job.result or job.result["clean"]:
+        raise ApiError(409, "prepare a report first")
+    if str(b.get("confirm", "")).strip().lower() != job.result["repo"].lower():
+        raise ApiError(400, "type the repository name to confirm")
+    if not _gh_login():
+        raise ApiError(400, "the GitHub CLI isn't signed in: run `gh auth login` in a terminal first")
+    try:
+        url = kit.module("report_owner").open_issue(job.result["repo"], job.result["report"])
+    except RuntimeError as e:
+        raise ApiError(502, str(e))
+    return {"ok": True, "url": url}
+
+
+def get_sandbox(q):
+    exe, ready, message = tools.sandbox_runtime()
+    return {"runtime": exe, "ready": ready, "message": message, "os": OS_NAME}
+
+
+def post_sandbox(b):
+    """Open a repository or folder in the sandbox, in a terminal window (it needs a real terminal for its shell)."""
+    try:
+        kind, spec, argv = tools.sandbox_command(str(b.get("target", "")))
+    except ValueError as e:
+        raise ApiError(400, str(e))
+    shown = " ".join(argv[-3:] if argv[0] != "ardvane" else argv)
+    if not tools.open_in_terminal(argv):
+        return {"launched": False, "command": shown}
+    return {"launched": True, "command": shown, "kind": kind}
+
+
+def get_secrets(q):
+    return kit.module("credaudit").audit()
+
+
 def get_update(q):
     return {"update": updates.status_now()}
 
@@ -434,12 +527,16 @@ def post_quit(b):
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
               "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update, "/api/history": get_history,
-              "/api/github/repos": get_github_repos, "/api/github/login": get_github_login}
+              "/api/github/repos": get_github_repos, "/api/github/login": get_github_login,
+              "/api/github/branches": get_github_branches, "/api/github/report": get_github_report, "/api/sandbox": get_sandbox,
+              "/api/secrets": get_secrets}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
                "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit,
                "/api/update/check": post_update_check, "/api/update/apply": post_update_apply,
-               "/api/history": post_history, "/api/history/cancel": post_history_cancel, "/api/daily/run-now": post_daily_now, "/api/github/enable": post_github_enable}
+               "/api/history": post_history, "/api/history/cancel": post_history_cancel, "/api/daily/run-now": post_daily_now, "/api/github/enable": post_github_enable,
+               "/api/github/branches": post_github_branches, "/api/github/report": post_github_report,
+               "/api/github/issue": post_github_issue, "/api/sandbox": post_sandbox}
 
 
 # ---------------------------------------------------------------------------------------------- HTTP plumbing

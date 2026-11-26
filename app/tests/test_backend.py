@@ -17,7 +17,7 @@ os.environ["HOME"] = os.environ["USERPROFILE"] = SANDBOX          # must be set 
 os.environ["ARDVANE_NO_UPDATE_CHECK"] = "1"                        # no network from the tests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend import config, docs, reports, scanjob, settings, tasks, updates    # noqa: E402
+from backend import config, docs, kit, reports, scanjob, settings, tasks, updates    # noqa: E402
 from backend.server import App, Handler                            # noqa: E402
 import http.server                                                 # noqa: E402
 
@@ -551,6 +551,90 @@ class Docs(unittest.TestCase):
         self.assertIsNotNone(docs.read("after-a-scan/if-danger-found.md"))
         for bad in ("../README.md", "../../app/backend/server.py", "/etc/hosts", "after-a-scan/../../LICENSE"):
             self.assertIsNone(docs.read(bad), bad)
+
+
+class NewTools(unittest.TestCase):
+    """0.12: block force pushes, tell the owner, open safely, secrets. The API only acts on what the app itself listed."""
+
+    def setUp(self):
+        from backend import server
+        self.server = server
+        self.gp = kit.module("github_protect")
+        self.gc = self.gp.gc
+        self.files = (self.gp.RULESETS_FILE, self.gc.AUDIT_FILE, server._gh_login)
+        folder = tempfile.mkdtemp(dir=SANDBOX)
+        self.gp.RULESETS_FILE, self.gc.AUDIT_FILE = os.path.join(folder, "rulesets.json"), os.path.join(folder, "audit.json")
+        with open(self.gc.AUDIT_FILE, "w") as f:
+            json.dump({"time": time.time(), "findings": [], "notes": [],
+                       "exposed": [{"repo": "me/app", "branch": "main", "private": False}]}, f)
+
+    def tearDown(self):
+        self.gp.RULESETS_FILE, self.gc.AUDIT_FILE, self.server._gh_login = self.files
+
+    def test_only_repositories_from_the_last_check_can_be_changed(self):
+        s = self.server
+        s._gh_login = lambda: "me"
+        self.assertEqual([r["repo"] for r in s.get_github_branches({})["exposed"]], ["me/app"])
+        with self.assertRaises(s.ApiError):                                    # not in the list: refused before gh is touched
+            s.post_github_branches({"action": "protect", "repos": ["someone/else"]})
+        with self.assertRaises(s.ApiError):
+            s.post_github_branches({"action": "format", "repos": ["me/app"]})
+        with self.assertRaises(s.ApiError):                                    # nothing of Ardvane's to undo
+            s.post_github_branches({"action": "undo", "repos": ["me/app"]})
+
+    def test_protect_and_undo_through_the_api(self):
+        s, calls = self.server, []
+
+        class Fake:
+            gh = "gh"
+
+            def get(self, path, limit=0):
+                return {"/repos/me/app": {"permissions": {"admin": True}, "default_branch": "main"}}.get(path, [])
+
+            def send(self, method, path, body=None):
+                calls.append((method, path))
+                return {"id": 7} if method == "POST" else {}
+        s._gh_login = lambda: "me"
+        real = self.gp.client_for_changes
+        self.gp.client_for_changes = lambda: Fake()
+        try:
+            out = s.post_github_branches({"action": "protect", "all": True})
+            self.assertEqual(out["results"][0]["status"], "protected")
+            self.assertEqual((out["exposed"], [r["repo"] for r in out["protected"]]), ([], ["me/app"]))
+            out = s.post_github_branches({"action": "undo", "repos": ["ME/APP"]})
+            self.assertEqual(out["results"][0]["status"], "removed")
+        finally:
+            self.gp.client_for_changes = real
+        self.assertEqual(calls, [("POST", "/repos/me/app/rulesets"), ("DELETE", "/repos/me/app/rulesets/7")])
+
+    def test_the_report_needs_a_valid_repository_and_an_issue_needs_the_name_typed(self):
+        s = self.server
+        with self.assertRaises(s.ApiError):
+            s.post_github_report({"repo": "not a repo"})
+        with self.assertRaises(s.ApiError):
+            s.post_github_issue({"confirm": "me/app"})                          # no report prepared
+        s.App.rjob = type("J", (), {"finished": 1, "result": {"clean": False, "repo": "me/app", "report": "x"}})()
+        s._gh_login = lambda: "me"
+        try:
+            with self.assertRaises(s.ApiError):
+                s.post_github_issue({"confirm": "me/other"})
+        finally:
+            s.App.rjob = None
+
+    def test_the_sandbox_only_opens_a_real_repository_or_folder(self):
+        s = self.server
+        for bad in ("", "x; rm -rf ~", "--privileged", "/no/such/folder"):
+            with self.assertRaises(s.ApiError, msg=bad):
+                s.post_sandbox({"target": bad})
+        from backend import tools
+        kind, spec, argv = tools.sandbox_command("owner/name")
+        self.assertEqual((kind, spec, argv[-2:]), ("github", "owner/name", ["sandbox", "owner/name"]))
+        self.assertIn("ready", s.get_sandbox({}))
+
+    def test_secrets_listing(self):
+        res = self.server.get_secrets({})
+        self.assertIn("items", res)
+        self.assertEqual(res["checked"], len(kit.module("credaudit").CHECKS))
 
 
 class Server(unittest.TestCase):
