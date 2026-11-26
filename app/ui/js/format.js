@@ -5,6 +5,14 @@ const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 export function plural(n, one, many) { return `${n} ${n === 1 ? one : (many || one + 's')}`; }
 
+/** A path with the home folder shown as ~ (shorter, and no user name in a screenshot). @param {string} path @param {string} home */
+export function tidyPath(path, home) {
+  const p = String(path || ''), h = String(home || '').replace(/[\\/]+$/, '');
+  if (!h) return p;
+  const fwd = p.replace(/\\/g, '/'), hf = h.replace(/\\/g, '/');
+  return fwd === hf ? '~' : fwd.startsWith(hf + '/') ? '~' + fwd.slice(hf.length) : p;
+}
+
 export function fmtTime(ts) {
   if (!ts) return '';
   const d = new Date(ts * 1000);

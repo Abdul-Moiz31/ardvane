@@ -36,6 +36,8 @@ jobs:
         run: python scanner/tests/test_safeinstall.py
       - name: History (every commit, branch and tag; clean history rewrites everything, push refuses races)
         run: python scanner/tests/test_history.py
+      - name: Self-scan (Ardvane never raises an alarm about its own source, installed copy or records)
+        run: python scanner/tests/test_selfscan.py
       - name: GitHub Action driver (annotations, summary, exit codes, no workflow-command injection)
         run: python scanner/tests/test_ci.py
       - name: Detection feed (signatures, strict content checks, no rollback) and its source file
@@ -168,3 +170,12 @@ jobs:
         run: |
           powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1 -Quick
           if ($LASTEXITCODE -eq 1) { exit 1 } else { exit 0 }
+      - name: The scan finds nothing in an installed Ardvane (laid out like a pipx install under %LOCALAPPDATA%)
+        shell: powershell
+        run: |
+          python packaging/build_wheel.py dist
+          $site = Join-Path $env:LOCALAPPDATA 'pipx\pipx\venvs\ardvane\Lib\site-packages'
+          python -m pip install --no-deps --target $site (Get-ChildItem dist\*.whl).FullName
+          Get-ChildItem (Join-Path $site 'ardvane\docs\attacks') | Select-Object -First 3 | ForEach-Object { Write-Host "installed: $($_.Name)" }
+          powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1 -Quick
+          if ($LASTEXITCODE -eq 1) { Write-Host '::error::the scan reported DANGER on Ardvane''s own installed files'; exit 1 } else { exit 0 }

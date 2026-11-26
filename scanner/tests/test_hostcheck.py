@@ -128,5 +128,20 @@ class HostCheck(unittest.TestCase):
         self.assertEqual(self.levels(found, ".bashrc"), ["D"])
 
 
+class WindowsScriptNeverFlagsItself(unittest.TestCase):
+    """The Windows scan once matched `MicrosoftSystem64*` and reported Ardvane's own doc (microsoftsystem64-implant.md,
+    inside the pipx install) as DANGER. File-name searches there must be exact names, never wildcards on a prefix."""
+
+    def test_no_prefix_wildcards_and_installed_files_are_skipped(self):
+        with open(os.path.join(HERE, "..", "..", "scan-my-machine.ps1"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertNotIn("MicrosoftSystem64*", text)
+        search = [ln for ln in text.splitlines() if "-Include" in ln and "MicrosoftSystem64" in ln]
+        self.assertEqual(len(search), 1)
+        self.assertIn("'MicrosoftSystem64.exe'", search[0])
+        self.assertIn("-File", search[0])
+        self.assertIn("pipx|site-packages|node_modules", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

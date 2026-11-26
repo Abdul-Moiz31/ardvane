@@ -85,9 +85,29 @@ while IFS= read -r f; do
   if [ -n "$who" ]; then out "  updated startup item, signed by $who: ${f/#$HOME/~}"
   else chk "new/changed startup item: ${f/#$HOME/~}"; fi
 done < <(find "$HOME/Library/LaunchAgents" /Library/LaunchAgents /Library/LaunchDaemons -type f -mtime -1 2>/dev/null)
-for f in "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile"; do
-  [ -f "$f" ] && [ -n "$(find "$f" -mtime -1 2>/dev/null)" ] && chk "${f/#$HOME/~} changed — check it contains nothing you didn't add"
-done
+# Shell startup files: warn when their content changed since the last check, leaving out Ardvane's own block (protect and
+# unprotect edit it), so Ardvane never reports its own edit. The first run only records; it needs Python.
+if [ -n "$PY" ]; then
+  while IFS= read -r l; do [ -n "$l" ] && chk "$l"; done < <("$PY" - "$HOME" "$DEST/shell-hashes.json" <<'PYEOF'
+import hashlib, json, os, re, sys
+home, store = sys.argv[1:3]
+BLOCK = re.compile(r"# >>> polinrider-survival-kit >>>.*?# <<< polinrider-survival-kit <<<\n?", re.S)
+try: old = json.load(open(store))
+except (OSError, ValueError): old = {}
+new = {}
+for name in (".zshrc", ".zprofile", ".zshenv", ".bash_profile", ".bashrc", ".profile"):
+    path = os.path.join(home, name)
+    if not os.path.isfile(path): continue
+    try: text = BLOCK.sub("", open(path, encoding="utf-8", errors="replace").read()).rstrip()
+    except OSError: continue
+    new[name] = hashlib.sha256(text.encode()).hexdigest()
+    if name in old and old[name] != new[name]:
+        print("~/" + name + " changed since the last check - check it contains nothing you didn't add")
+try: json.dump(new, open(store, "w"))
+except OSError: pass
+PYEOF
+)
+fi
 ls "$HOME/Library/LaunchAgents" /Library/LaunchAgents 2>/dev/null | grep -qi "^com\.apple\." && chk "Apple-named item in a third-party LaunchAgents folder (fake Apple names are a red flag)"
 crontab -l 2>/dev/null | grep -qE "curl|wget|node|python|base64|/tmp/" && chk "crontab runs a download/script — review: crontab -l"
 [ $warn -eq $n ] && out "  ✅ nothing unusual"

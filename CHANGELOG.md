@@ -3,6 +3,29 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.11.3
+
+**Ardvane no longer raises alarms about itself, and the GitHub check is easier to find.**
+
+- Fixed false alarms from Ardvane's own files and activity:
+  - the process check no longer reports a shell started with `-c` (a terminal, an AI assistant, a script) that merely
+    mentions a malware name; the program it actually runs is still checked on its own;
+  - scanning a folder above `~/.checkrepo` no longer reports Ardvane's own records (the to-do list quotes findings,
+    quarantine and history backups hold malware on purpose);
+  - the daily check no longer warns about a shell startup file because Ardvane's own protection block was added to
+    it or removed; it now warns when anything else in the file changed since the last check.
+  A new test scans Ardvane's source, its installed copy and its records on every change, and the Windows tests now
+  scan an installed copy too.
+- The Overview offers to turn on the GitHub check in one click when the GitHub CLI is already signed in.
+- The history screens show `~/.checkrepo/...` instead of your full home folder path.
+- The README is current: the new features, the real test counts, plain headings and the right Action version.
+
+## 0.11.2
+
+- Fixed a false alarm on Windows: the machine scan reported Ardvane's own documentation (`microsoftsystem64-implant.md`, inside the
+  pipx install) as malware. The known-locations search now matches exact implant file names only and skips installed
+  packages.
+
 ## 0.11.1
 
 - Bigger, easier to read type in the dashboard: every text size one step up (body 15px, labels 14px), brighter secondary

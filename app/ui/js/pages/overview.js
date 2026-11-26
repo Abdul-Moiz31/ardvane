@@ -7,7 +7,7 @@ import { modal, closeModal, toast, showError } from '../feedback.js';
 import { api } from '../api.js';
 import { fmtTime, nextRun, plural } from '../format.js';
 import { ring, history } from '../charts.js';
-import { S, loadTasks, loadReports, heroState, latestResult, protectionCount, scopeText, INFECTED_GUIDE } from '../store.js';
+import { S, refresh, rerender, loadTasks, loadReports, heroState, latestResult, protectionCount, scopeText, INFECTED_GUIDE } from '../store.js';
 import { installFlow, setRoutine, startScan, updateFlow, launcherAction } from '../actions.js';
 import { recentReports, protectionRows } from '../components.js';
 import { loadFixes, confirmFix } from '../fixes.js';
@@ -23,6 +23,7 @@ export function renderOverview() {
     statusBar(),
     updateBanner(),
     blockedFolders(),
+    githubHint(),
     kpis(),
     h('div', { class: 'overview-grid' }, attention(),
       card('Last 30 days', 'chart', h('div', { class: 'card-pad' }, S.reports ? history(S.reports) : h('div', { class: 'skeleton chart-skeleton' })),
@@ -31,6 +32,29 @@ export function renderOverview() {
       card('Protection', 'shield', h('div', { class: 'list' }, protectionRows(true)), h('a', { href: '#protection', text: 'Manage' })),
       card('Recent activity', 'file', recentReports(4), h('a', { href: '#reports', text: 'All reports' }))),
   ];
+}
+
+/** The GitHub check is opt-in and easy to miss. When the GitHub CLI is already signed in, offer to turn it on in one click. */
+function githubHint() {
+  const s = S.data.settings;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('ardvane-github-hint') === '1'; } catch (e) { /* private window */ }
+  if (s.github_enabled || dismissed || !s.gh || (S.scan && S.scan.running)) return null;
+  if (S.ghLogin === undefined) {
+    S.ghLogin = null;
+    api('/api/github/login').then(r => { S.ghLogin = r.login || ''; rerender(); }).catch(() => { S.ghLogin = ''; });
+  }
+  if (!S.ghLogin) return null;
+  /** @type {HTMLElement|null} */
+  let on = null;
+  on = button('Turn on', () => busy(/** @type {HTMLButtonElement} */ (on), async () => {
+    try { await api('/api/github/enable', {}); await refresh(); toast(`GitHub @${S.ghLogin} will be checked: scans and the daily check now include it`, 'ok'); }
+    catch (e) { showError(e); }
+  }), 'btn-primary', 'github');
+  const later = button('Not now', () => { try { localStorage.setItem('ardvane-github-hint', '1'); } catch (e) { /* ignore */ } rerender(); }, 'btn-ghost');
+  return banner('ok', 'github', `Check GitHub @${S.ghLogin} too?`,
+    'The worm spreads through your GitHub access. Ardvane can audit the account (runners, deploy keys, webhooks, force-push exposure) and scan recently pushed repositories, live while a scan runs. Your token stays inside the GitHub CLI.',
+    h('div', { class: 'row' }, on, later));
 }
 
 /** A newer Ardvane: what's new, and one button to update. */

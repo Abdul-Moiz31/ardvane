@@ -6,8 +6,11 @@ import { api } from '../api.js';
 import { h, button, card, banner, pageHead, pill, busy } from '../dom.js';
 import { icon } from '../icons.js';
 import { modal, closeModal, toast, showError } from '../feedback.js';
-import { fmtTime, plural } from '../format.js';
+import { fmtTime, plural, tidyPath } from '../format.js';
 import { S, rerender } from '../store.js';
+
+/** @param {string} p */
+const tidy = p => tidyPath(p, S.data && S.data.home);
 
 /** @type {number|null} */
 let poller = null;
@@ -144,7 +147,7 @@ function planView(p, j) {
   const body = h('div', { class: 'card-pad stack' },
     banner(lvl, lvl === 'ok' ? 'shieldCheck' : 'alert', title, text,
       p.state === 'ready' ? button('Push clean history…', () => confirmPush(p), 'btn-danger-solid', 'shield') : null),
-    h('p', { class: 'help mono', text: `Backup: ${p.workdir}/backup.git · prepared ${fmtTime(p.created)}` }),
+    h('p', { class: 'help mono', text: `Backup: ${tidy(p.workdir)}/backup.git · prepared ${fmtTime(p.created)}` }),
     refs.length ? h('div', { class: 'list' }, refs.slice(0, 40).map(([ref, c]) => h('div', { class: 'list-row' },
       h('div', { class: 'grow' }, h('div', { class: 'title mono', text: ref.replace(/^refs\/(heads|tags)\//, '') }),
         h('div', { class: 'desc mono', text: /** @type {any} */ (c).files.slice(0, 6).join('   ') + (/** @type {any} */ (c).files.length > 6 ? '   …' : '') }))))) : null,
@@ -171,7 +174,7 @@ function confirmPush(p) {
 /** @param {any} p */
 function pushed(p) {
   return card('Clean history pushed', 'shieldCheck', h('div', { class: 'card-pad stack' },
-    banner('ok', 'checkCircle', `${p.target}'s history is clean on GitHub`, `${plural(Object.keys(p.changes).length, 'branch and tag', 'branches and tags')} replaced. The backup stays in ${p.workdir}/backup.git.`),
+    banner('ok', 'checkCircle', `${p.target}'s history is clean on GitHub`, `${plural(Object.keys(p.changes).length, 'branch and tag', 'branches and tags')} replaced. The backup stays in ${tidy(p.workdir)}/backup.git.`),
     h('ol', { class: 'change-list' },
       h('li', { text: 'Clone the repository again on every computer; delete the old copies.' }),
       h('li', { text: 'Ask collaborators to do the same, and to rebase open work onto the new branches.' }),
