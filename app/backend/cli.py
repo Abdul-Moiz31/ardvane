@@ -32,6 +32,11 @@ USAGE = f"""{APP_NAME} {VERSION}: protection against malware that spreads throug
   {PROG} history scan FOLDER|OWNER/NAME  check every commit, branch and tag of a repository for malware
   {PROG} history clean OWNER/NAME     prepare a clean history (backup + rewrite + check); nothing is pushed
   {PROG} history push WORKDIR         push a prepared clean history (refused if anyone pushed meanwhile)
+  {PROG} branches [list | protect REPO ... | protect --all | undo REPO]
+                                       block force pushes to your repositories with a GitHub ruleset
+  {PROG} report-owner OWNER/NAME      scan a repository shared with you and write the report its owner needs
+  {PROG} sandbox OWNER/NAME|FOLDER    open a coding test in a throwaway container, after scanning it
+  {PROG} secrets                      find credentials in plain text files and see how to move off them
   {PROG} launcher [--remove]          add (or remove) the app icon
   {PROG} --version
 
@@ -145,6 +150,10 @@ COMMANDS = {
     "unprotect": lambda a: _call(actions.installer_command("uninstall")),
     "fixes": lambda a: _scanner("autofix.py", a or ["list"]),
     "history": lambda a: _scanner("history.py", a or ["--help"]),
+    "branches": lambda a: _scanner("github_protect.py", a or ["list"]),
+    "report-owner": lambda a: _scanner("report_owner.py", a or ["--help"]),
+    "sandbox": lambda a: _scanner("sandbox.py", a or ["--help"]),
+    "secrets": lambda a: _scanner("credaudit.py", a),
     "launcher": lambda a: print((launcher.remove() if "--remove" in a else launcher.install())[1]) or 0,
 }
 

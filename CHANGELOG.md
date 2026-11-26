@@ -3,6 +3,29 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.12.0
+
+**Four new tools: block force pushes, warn a repository's owner, open coding tests safely, and get off plain-text credentials.**
+
+- **Block force pushes (GitHub page, `ardvane branches`).** The GitHub check already lists your repositories that
+  a stolen token could force-push. One click (or `ardvane branches protect --all`) adds a ruleset to each one's default
+  branch that refuses force pushes and deleting the branch, with no exceptions. You see exactly what will be added
+  first; every ruleset is remembered and can be undone. Needs the signed-in GitHub CLI and repositories you administer.
+- **Tell the owner (GitHub page, `ardvane report-owner owner/name`).** For a repository shared with you that carries
+  malware, Ardvane scans every branch on GitHub (nothing is cloned) and writes the report its owner needs: what was
+  found and where, why it matters, and what to do in order. Copy it, save it, send it privately, or open it as an issue
+  after typing the repository's name. The report holds nothing about your computer.
+- **Open safely (Protection page, `ardvane sandbox owner/name`).** Scans a coding test first, then opens it in a throwaway
+  Docker or Podman container that shares none of your files, keys or environment (all capabilities dropped, memory,
+  CPU and process limits), clones inside the container with git hooks off, and deletes the container when you leave.
+  Nothing is opened if malware is found. If Docker (or Podman) is installed but not running, Ardvane starts it and
+  waits for it (macOS: Docker Desktop, OrbStack, Colima; Windows: Docker Desktop); if neither is installed it says where
+  to get one. The first run downloads the image once (about 1.6 GB).
+- **Secrets page (`ardvane secrets`).** Finds credentials sitting in plain text files (AWS keys, GitHub CLI token, npm,
+  Docker, git, PyPI, Kubernetes, Google Cloud), shows how long ago each file changed and walks you off them step by
+  step: SSO or the keychain first, the old key last. It never shows a secret and never edits those files.
+- New tests for all four, including that the sandbox mounts nothing and passes nothing from your computer.
+
 ## 0.11.3
 
 **Ardvane no longer raises alarms about itself, and the GitHub check is easier to find.**

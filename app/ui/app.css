@@ -152,6 +152,7 @@ p { margin: 0; }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stack { display: flex; flex-direction: column; gap: 12px; }
+.row > input.grow { flex: 1 1 360px; min-width: 0; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .spacer { flex: 1; }
 .divider { height: 1px; background: var(--border); margin: 4px 0; }
@@ -337,6 +338,7 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .side-item:hover { background: var(--hover); }
 .side-item.active { background: var(--surface-2); box-shadow: var(--highlight), 0 0 0 1px var(--border); }
 .side-group { padding: 16px 12px 6px; color: var(--text-3); }
+.report-preview { margin: 0; padding: 16px 18px; background: var(--deep); border: 1px solid var(--border); border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.65; max-height: 420px; overflow: auto; }
 .report-text { margin: 0; padding: 18px 24px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.7; max-height: calc(100vh - 230px); overflow: auto; }
 .tabs { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); gap: 2px; }
 .tabs button { border: 0; background: transparent; color: var(--text-2); font: 500 14px var(--font); padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: background .2s, color .2s; }

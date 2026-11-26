@@ -189,8 +189,8 @@ if FEED:
 # ---------------------------------------------------------------- file classes
 # Ardvane's own records: to-do and fix history quote the findings (including malware strings), quarantine and history backups
 # hold the malware on purpose, reports describe it. They are evidence, not code, so scanning a parent folder never reports them.
-OWN_DATA_DIRS = {"quarantine", "history", "reports", "scans"}
-OWN_DATA_FILES = {"tasks.json", "fixes.json", "dashboard.json", "settings.json", "update.json", "github-audit.json", "github-seen.json",
+OWN_DATA_DIRS = {"quarantine", "history", "reports", "scans", "launch"}
+OWN_DATA_FILES = {"tasks.json", "fixes.json", "dashboard.json", "settings.json", "update.json", "github-audit.json", "github-seen.json", "github-rulesets.json",
                   "osv-cache.json", "extensions-seen.txt", "fingerprints.txt", "malware-paths.txt", "indicators.signed"}
 
 

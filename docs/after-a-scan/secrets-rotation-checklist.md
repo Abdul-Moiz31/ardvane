@@ -4,6 +4,8 @@ Assume **everything that was on the infected machine** was stolen. The stealers 
 environment variables and `.env` files, browser cookies and saved passwords, the macOS Keychain, SSH keys and
 crypto wallets.
 
+`ardvane secrets` (or Ardvane's **Secrets** page) lists the credentials that sit in plain text files on this computer, such as AWS keys, an npm or GitHub token, Docker and git logins, and walks you off each one: the new login first, the old key last. It never shows a secret.
+
 Do it **from a clean device** if you can (or after reinstalling), otherwise the new secrets can be stolen too.
 
 ## 1. Accounts (passwords + sign out all other sessions)

@@ -14,9 +14,11 @@ import { renderLearn } from './pages/learn.js';
 import { renderSettings } from './pages/settings.js';
 import { renderTodo } from './pages/todo.js';
 import { renderHistory } from './pages/history.js';
+import { renderGithub } from './pages/github.js';
+import { renderSecrets } from './pages/secrets.js';
 
 /** @type {Record<string, (sub: string) => (Node|null)[]>} */
-const PAGES = { overview: renderOverview, todo: renderTodo, scan: renderScan, history: renderHistory, protection: renderProtection, reports: renderReports, learn: renderLearn, settings: renderSettings };
+const PAGES = { overview: renderOverview, todo: renderTodo, scan: renderScan, history: renderHistory, github: renderGithub, secrets: renderSecrets, protection: renderProtection, reports: renderReports, learn: renderLearn, settings: renderSettings };
 
 function route() {
   const [page, ...rest] = (location.hash || '#overview').slice(1).split('/');

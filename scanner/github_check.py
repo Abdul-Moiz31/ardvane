@@ -125,6 +125,34 @@ class Client:
             raise RuntimeError("response too large")
         return json.loads(data.decode("utf-8"))
 
+    def send(self, method, path, body=None):
+        """A change to GitHub (POST / DELETE / PATCH) through `gh`, which keeps your token. Never used by the scans:
+        only by the actions you start yourself (blocking force pushes, opening an issue). Needs gh: the answer is
+        the parsed JSON, or {} when GitHub returns nothing (a delete)."""
+        if not self.gh:
+            raise RuntimeError("log in with `gh auth login` first: changing GitHub needs your signed-in GitHub CLI")
+        cmd = [self.gh, "api", "-X", method, "-H", "Accept: application/vnd.github+json", path]
+        payload = None
+        if body is not None:
+            cmd += ["--input", "-"]
+            payload = json.dumps(body).encode("utf-8")
+        try:
+            r = subprocess.run(cmd, input=payload, capture_output=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("GitHub did not answer within 2 minutes")
+        out = (r.stdout or b"").decode("utf-8", "replace").strip()
+        if r.returncode != 0:
+            msg = ""
+            try:                                   # gh prints GitHub's JSON error (with its message) on stdout
+                msg = json.loads(out).get("message", "") if out else ""
+            except (ValueError, AttributeError):
+                pass
+            gh_error(msg or (r.stderr or b"").decode("utf-8", "replace"), r.returncode)
+        try:
+            return json.loads(out) if out else {}
+        except ValueError:
+            return {}
+
     def download(self, path, dest):
         """Stream an archive into the file `dest`. Stops when it gets too big for the free disk space, when the
         whole download takes longer than DOWNLOAD_TIMEOUT, or when GitHub/gh reports an error."""
@@ -522,6 +550,7 @@ def audit_account(client, repos, result, now=None, force=False):
         progress("phase", text="account audit: using today's result (it runs once a day)")
         result["findings"] += [f for f in cache.get("findings", []) if isinstance(f, list) and len(f) == 3]
         result["notes"] += cache.get("notes", [])
+        result["exposed"] = cache.get("exposed", [])
         return
     found, notes = [], []
     owned = [r for r in repos if (r.get("permissions") or {}).get("admin") and not r.get("archived")][:AUDIT_MAX_REPOS]
@@ -562,13 +591,14 @@ def audit_account(client, repos, result, now=None, force=False):
         return out, open_
 
     from concurrent.futures import ThreadPoolExecutor
-    unprotected = []
+    unprotected, exposed = [], []
     progress("phase", text=f"auditing {len(owned)} repositories you administer", total=len(owned))
     with ThreadPoolExecutor(max_workers=8) as pool:
         for i, (r, (out, open_)) in enumerate(zip(owned, pool.map(one, owned))):
             found += out
             if open_:
                 unprotected.append(r["full_name"])
+                exposed.append({"repo": r["full_name"], "branch": r.get("default_branch") or "main", "private": bool(r.get("private"))})
             progress("audited", repo=r["full_name"], done=i + 1, total=len(owned),
                      outcome="found" if any(f[0] == "DANGER" for f in out) else "warn" if out else "clean",
                      findings=[f[2][:120] for f in out][:3], force_push=open_)
@@ -578,12 +608,13 @@ def audit_account(client, repos, result, now=None, force=False):
                           "(github.com/settings/keys) unless you added it"])
     if unprotected:
         notes.append(f"{len(unprotected)} of {len(owned)} repositories you administer let a stolen token force-push the default branch "
-                     f"(e.g. {', '.join(unprotected[:3])}) - add a ruleset that blocks force pushes")
+                     f"(e.g. {', '.join(unprotected[:3])}) - add a ruleset that blocks force pushes (`ardvane branches protect --all` does it)")
     if len([r for r in repos if (r.get('permissions') or {}).get('admin')]) > AUDIT_MAX_REPOS:
         notes.append(f"the account audit covered the first {AUDIT_MAX_REPOS} repositories you administer")
-    write_json(AUDIT_FILE, {"time": time.time(), "findings": found, "notes": notes})
+    write_json(AUDIT_FILE, {"time": time.time(), "findings": found, "notes": notes, "exposed": exposed, "admin": len(owned)})
     result["findings"] += found
     result["notes"] += notes
+    result["exposed"] = exposed
     result["audited"] = len(owned)
 
 
