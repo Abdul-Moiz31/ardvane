@@ -11,7 +11,7 @@ What happens:
   1. The repository is scanned first, read-only: a GitHub repository on every branch without cloning it, a folder with
      the usual folder scan. If malware is found, nothing is opened (--force overrides, for people who study malware).
   2. A container starts with no folder of yours mounted, no environment variables of yours, no Docker socket, all Linux
-     capabilities dropped, no new privileges, and limited memory, CPU and processes.
+     capabilities dropped (except taking ownership of a copied folder), no new privileges, and limited memory, CPU and processes.
   3. The code goes in: a GitHub repository is cloned INSIDE the container (hooks off, shallow, no submodules); a folder
      is copied in. You get a shell in it. Run the test there.
   4. When you leave the shell, the container and everything in it is deleted.
@@ -37,7 +37,7 @@ import github_check as gc  # noqa: E402
 DEFAULT_IMAGE = "node:22-bookworm"           # git, Node, Python and a compiler: what take-home tests usually need
 IMAGE_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,80}(?::[A-Za-z0-9._-]{1,60})?$")
 LIMITS = ["--memory", "4g", "--cpus", "2", "--pids-limit", "512"]
-LOCKDOWN = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--init"]
+LOCKDOWN = ["--cap-drop", "ALL", "--cap-add", "CHOWN", "--security-opt", "no-new-privileges", "--init"]   # CHOWN only: to own the copied files
 WORKDIR = "/work"
 CLONE = 'git -c core.hooksPath=/dev/null clone --depth 1 --no-recurse-submodules -- "$1" repo'
 
@@ -95,6 +95,7 @@ def commands(exe, kind, target, name, image=DEFAULT_IMAGE, network=True):
                                                          f"https://github.com/{target}.git"]))
     else:
         steps.append(("copy the folder in", [exe, "cp", target + os.sep + ".", f"{name}:{WORKDIR}/repo"]))
+        steps.append(("take ownership of the copy", [exe, "exec", name, "chown", "-R", "0:0", f"{WORKDIR}/repo"]))   # copied files keep your user id: the container's root couldn't write to them
     steps.append(("open a shell", [exe, "exec", "-it", "-w", f"{WORKDIR}/repo", name, "bash"]))
     steps.append(("delete the container", [exe, "rm", "-f", name]))
     return steps
@@ -139,7 +140,7 @@ def open_sandbox(target, image=DEFAULT_IMAGE, network=True, force=False, dry_run
     code = 0
     try:
         for what, argv in steps[:-1]:
-            quiet = what in ("start the container", "copy the folder in")
+            quiet = what in ("start the container", "copy the folder in", "take ownership of the copy")
             r = subprocess.call(argv, stdout=subprocess.DEVNULL if quiet else None)
             if r != 0 and what != "open a shell":      # leaving the shell with a non-zero code is not a failure
                 print(f"sandbox: could not {what}", file=sys.stderr)

@@ -169,6 +169,8 @@ class Sandbox(unittest.TestCase):
         steps = sb.commands("podman", "folder", SANDBOX_HOME, "n", network=False)
         self.assertEqual(steps[0][1][steps[0][1].index("--network") + 1], "none")
         self.assertEqual(steps[1][1][:2], ["podman", "cp"])
+        self.assertIn("chown", steps[2][1], "the copy is made writable for the container")
+        self.assertEqual(steps[0][1].count("--cap-add"), 1)
         self.assertEqual(steps[-1][1][:3], ["podman", "rm", "-f"], "the container is always deleted last")
 
     def test_image_names_are_validated_and_dry_run_shows_everything(self):
