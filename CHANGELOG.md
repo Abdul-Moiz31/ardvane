@@ -3,6 +3,12 @@
 Each version's section becomes its GitHub release notes automatically. To release, raise `VERSION` in
 `app/backend/config.py`, add a section here, and merge the pull request.
 
+## 0.11.2
+
+- Fixed a false alarm on Windows: the machine scan reported Ardvane's own documentation (`microsoftsystem64-implant.md`, inside the
+  pipx install) as malware. The known-locations search now matches exact implant file names only and skips installed
+  packages.
+
 ## 0.11.1
 
 - Bigger, easier to read type in the dashboard: every text size one step up (body 15px, labels 14px), brighter secondary

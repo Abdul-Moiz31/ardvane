@@ -67,7 +67,8 @@ foreach ($p in @("$env:LOCALAPPDATA\MicrosoftSystem64", "$env:LOCALAPPDATA\Micro
                  "$HOME\.node_modules", "$HOME\.n2", "$HOME\.n3", "$HOME\.npl", "$HOME\.pyp", "$HOME\.sysinfo", "$HOME\.pcl-data", "$HOME\.pcl-state")) {
     if (Test-Path $p) { Bad "found: $p" $p }
 }
-Get-ChildItem "$env:TEMP", "$env:APPDATA", "$env:LOCALAPPDATA" -Include 'SvcHostUpdate.py','SvcHostUpdate.js','MicrosoftCLROptimization.vbs','MicrosoftSystem64*' -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+Get-ChildItem "$env:TEMP", "$env:APPDATA", "$env:LOCALAPPDATA" -Include 'SvcHostUpdate.py','SvcHostUpdate.js','MicrosoftCLROptimization.vbs','MicrosoftSystem64.exe','MicrosoftSystem64-win.exe' -Recurse -Depth 2 -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\(?:pipx|site-packages|node_modules)\\' } |      # never Ardvane's own files or installed docs
     ForEach-Object { Bad "found: $($_.FullName)" $_.FullName }
 if ($script:danger -eq $n) { Okay 'none' }
 
