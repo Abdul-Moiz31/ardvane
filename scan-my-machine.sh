@@ -88,7 +88,8 @@ fi
 # ------------------------------------------------------------------ 2. processes
 head1 "2. Running processes"
 n=$danger; nw=$warn
-plist="$(ps -axo pid=,args= 2>/dev/null | grep -v -e "scan-my-machine" -e "grep")"
+# shells started with -c only wrap another command (a terminal, an assistant): that command is listed on its own line
+plist="$(ps -axo pid=,args= 2>/dev/null | grep -v -e "scan-my-machine" -e "grep" | grep -v -E '^ *[0-9]+ +(/[^ ]*/)?(sh|bash|zsh|dash|fish|ksh) +(-[A-Za-z]*c|-[A-Za-z]+ +-[A-Za-z]*c)( |$)')"
 while IFS= read -r l; do [ -n "$l" ] && bad "process: ${l:0:150}"; done < <(printf '%s\n' "$plist" | grep -E \
   "MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimization|tg14xq|VSCodeUpdater|/\.node_modules/|/\.n[23]/|/\.npl|node [^ ]*\.(eot|woff2?|ttf|otf|llf)( |$)|gh-token-monitor|kitty-monitor|bun_environment\.js|tanstack_runner\.js|router_runtime\.js")
 while IFS= read -r l; do [ -n "$l" ] && chk "inline node process fetching/decoding code: ${l:0:150}"; done < <(printf '%s\n' "$plist" | grep -E "node -e " | grep -E "https?://|eval|base64|Buffer\.from|atob")

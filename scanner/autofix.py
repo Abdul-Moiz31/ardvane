@@ -61,6 +61,9 @@ PROCESS_RE = re.compile(r"MicrosoftSystem64|SvcHostUpdate|MicrosoftCLROptimizati
                         r"|gh-token-monitor|kitty-monitor|bun_environment\.js|tanstack_runner\.js|router_runtime\.js", re.I)
 # A command whose program is one of these only mentions a malware name (someone searching or reading), it isn't malware
 TEXT_TOOLS = {"grep", "egrep", "rg", "ag", "ack", "less", "more", "cat", "head", "tail", "vi", "vim", "nvim", "nano", "emacs", "code", "find", "findstr", "select-string"}
+# a shell started with -c only wraps another command (a terminal, an AI assistant, a script): what it runs is listed as its own
+# process, so a malware name in the wrapper's text is somebody typing it, not the malware
+SHELLS = {"sh", "bash", "zsh", "dash", "fish", "ksh", "tcsh", "csh", "pwsh", "powershell", "cmd"}
 EDITORS = ("Code", "Cursor", "Windsurf")
 EDITOR_NAMES = {"Code": "VS Code", "Cursor": "Cursor", "Windsurf": "Windsurf"}
 
@@ -279,12 +282,19 @@ def list_processes():
     return [(int(r[0]), r[1] if len(r) > 1 else "") for r in rows if r and r[0].strip().isdigit()]
 
 
+def is_shell_wrapper(program, cmd):
+    """`zsh -c "..."`, `bash -lc "..."`, `cmd /c ...`: a shell that only runs the command it was given."""
+    if program not in SHELLS:
+        return False
+    return re.search(r"\s-[a-z]*c(?:\s|$)|\s/[ck](?:\s|$)", cmd[len(cmd.split()[0]):], re.I) is not None
+
+
 def detect_processes(processes=None):
     me = {os.getpid(), os.getppid()}
     out = []
     for pid, cmd in (processes if processes is not None else list_processes()):
         program = os.path.basename((cmd.split() or [""])[0]).lower().replace(".exe", "")
-        if pid in me or pid <= 1 or "autofix" in cmd or program in TEXT_TOOLS or not PROCESS_RE.search(cmd):
+        if pid in me or pid <= 1 or "autofix" in cmd or program in TEXT_TOOLS or is_shell_wrapper(program, cmd) or not PROCESS_RE.search(cmd):
             continue
         out.append(fix(f"process:{pid}:{short(cmd)}", "process", f"Stop malware process {pid}", cmd[:160], False, str(pid),
                        [f"stop process {pid}: {cmd[:120]}"], undo=False, clean=True))

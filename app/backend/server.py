@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.parse
 
-from . import actions, detections, docs, fixes, historyjob, launcher, reports, settings, status, tasks, updates
+from . import actions, detections, docs, fixes, historyjob, kit, launcher, reports, settings, status, tasks, updates
 from .config import APP_ID, APP_NAME, DEFAULT_FOLDERS, DEST, HOME, IS_MAC, KIT, OS_NAME, ROUTINE_LABEL, UI, VERSION
 from .system import kit_env, python_exe, run
 from .scanjob import ScanJob
@@ -370,6 +370,29 @@ def post_history_cancel(b):
     return {"ok": True}
 
 
+def _gh_login():
+    """The GitHub login the GitHub CLI is signed in as, or '' (not installed, not signed in, or only a CI token)."""
+    gc = kit.module("github_check")
+    login = gc.gh_login()
+    return "" if not login or login == gc.CI_LOGIN else login
+
+
+def get_github_login(q):
+    """Is there a signed-in GitHub CLI Ardvane can use, and as whom (so Overview can offer one-click setup)."""
+    s = settings.load()
+    return {"gh": bool(shutil.which("gh")), "login": _gh_login(), "enabled": s["github_enabled"] and bool(s["github_user"])}
+
+
+def post_github_enable(b):
+    """Turn the GitHub check on for the account the GitHub CLI is signed in as."""
+    login = _gh_login()
+    if not login:
+        raise ApiError(400, "the GitHub CLI isn't signed in: run `gh auth login` in a terminal first")
+    with settings.editing() as s:
+        s["github_user"], s["github_enabled"] = settings.clean_github_user(login), True
+    return {"ok": True, "login": login}
+
+
 def get_github_repos(q):
     """The repositories the GitHub login can see, to choose from in Settings (read-only, through github_check)."""
     cmd = [python_exe(), os.path.join(KIT, "scanner", "github_check.py")]
@@ -411,12 +434,12 @@ def post_quit(b):
 
 GET_ROUTES = {"/api/ping": lambda q: {"ok": True}, "/api/state": get_state, "/api/scan": get_scan, "/api/reports": get_reports,
               "/api/report": get_report, "/api/tasks": get_tasks, "/api/fixes": get_fixes, "/api/docs": get_docs, "/api/doc": get_doc, "/api/preview-install": get_preview, "/api/update": get_update, "/api/history": get_history,
-              "/api/github/repos": get_github_repos}
+              "/api/github/repos": get_github_repos, "/api/github/login": get_github_login}
 POST_ROUTES = {"/api/ping": lambda b: {"ok": True}, "/api/scan": post_scan, "/api/scan/cancel": post_cancel,
                "/api/reveal": post_reveal, "/api/dismiss": post_dismiss, "/api/task": post_task, "/api/fix": post_fix, "/api/fix/undo": post_unfix, "/api/pick-folder": post_pick_folder, "/api/feed/update": post_feed_update, "/api/settings": post_settings,
                "/api/protect": post_protect, "/api/routine": post_routine, "/api/launcher": post_launcher, "/api/quit": post_quit,
                "/api/update/check": post_update_check, "/api/update/apply": post_update_apply,
-               "/api/history": post_history, "/api/history/cancel": post_history_cancel, "/api/daily/run-now": post_daily_now}
+               "/api/history": post_history, "/api/history/cancel": post_history_cancel, "/api/daily/run-now": post_daily_now, "/api/github/enable": post_github_enable}
 
 
 # ---------------------------------------------------------------------------------------------- HTTP plumbing

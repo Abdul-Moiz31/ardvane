@@ -238,6 +238,25 @@ class Settings(unittest.TestCase):
         settings.save(s)
         self.assertEqual(settings.load()["github_repos"], ["o/a"])
 
+    def test_one_click_github_setup(self):
+        from backend import server
+        real = server._gh_login
+        try:
+            server._gh_login = lambda: ""                                  # the GitHub CLI isn't signed in
+            with self.assertRaises(server.ApiError):
+                server.post_github_enable({})
+            self.assertEqual(server.get_github_login({})["login"], "")
+            server._gh_login = lambda: "mira-chen"
+            self.assertEqual(server.get_github_login({})["login"], "mira-chen")
+            self.assertEqual(server.post_github_enable({})["login"], "mira-chen")
+            s = settings.load()
+            self.assertEqual((s["github_enabled"], s["github_user"]), (True, "mira-chen"))
+            self.assertTrue(server.get_github_login({})["enabled"])
+        finally:
+            server._gh_login = real
+            with settings.editing() as s:
+                s["github_enabled"], s["github_user"] = False, ""
+
     def test_github_scope(self):
         from backend import server
         self.assertEqual(settings.load()["github_scope"], "all")                  # every repository you can push to

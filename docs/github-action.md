@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Abdul-Moiz31/ardvane@v0.3.0
+      - uses: Abdul-Moiz31/ardvane@v0.11.3
 ```
 
 Malware fails the check and appears on the exact file in the pull request, with a summary of what to do. Make the
@@ -40,7 +40,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: Abdul-Moiz31/ardvane@v0.3.0
+      - uses: Abdul-Moiz31/ardvane@v0.11.3
         with:
           mode: all-branches
 ```
@@ -54,7 +54,7 @@ workflow runs in, so give it a [fine-grained token](https://github.com/settings/
 **read-only** access to the repositories' **contents**, saved as a secret:
 
 ```yaml
-      - uses: Abdul-Moiz31/ardvane@v0.3.0
+      - uses: Abdul-Moiz31/ardvane@v0.11.3
         with:
           mode: all-branches
           token: ${{ secrets.ARDVANE_READ_TOKEN }}

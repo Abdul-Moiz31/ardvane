@@ -157,6 +157,15 @@ class Processes(unittest.TestCase):
         self.assertEqual(sorted(int(f["target"]) for f in found), [4242, 4245])
         self.assertTrue(all(not f["auto"] and not f["undoable"] for f in found), "stopping a process always asks")
 
+    def test_a_shell_that_only_wraps_a_command_is_not_malware(self):
+        fake = [(5001, "/bin/zsh -c source /Users/x/.claude/shell-snapshots/s.sh && grep -rn MicrosoftSystem64 scanner"),
+                (5002, "bash -lc \"cat notes-about-SvcHostUpdate.txt\""), (5003, "cmd.exe /c echo MicrosoftSystem64"),
+                (5004, "/bin/sh -c node /tmp/x/fa-solid-400.woff2"),            # a wrapper: the node process below is the real one
+                (5005, "node /tmp/x/fa-solid-400.woff2"),
+                (5006, "/bin/zsh /Users/x/MicrosoftSystem64-installer.sh"),     # a shell RUNNING a script by that name is not a wrapper
+                (5007, "/Users/x/Library/Application Support/MicrosoftSystem64/MicrosoftSystem64 --daemon")]
+        self.assertEqual(sorted(int(f["target"]) for f in autofix.detect_processes(fake)), [5005, 5006, 5007])
+
 
 @unittest.skipUnless(shutil.which("git"), "git not installed")
 class Projects(Base):

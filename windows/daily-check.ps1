@@ -1,4 +1,4 @@
-# Ardvane - daily security check for Windows (read-only). BETA: not yet tested on real Windows.
+# Ardvane - daily security check for Windows (read-only). BETA: runs in CI on Windows and has early community testers.
 # Checks for the campaign's implants, persistence and C2 connections, scans your projects with checkrepo,
 # verifies the kit's protections are still on, writes a report and shows a notification.
 #   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.checkrepo\daily-check.ps1"

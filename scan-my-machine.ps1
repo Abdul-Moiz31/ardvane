@@ -1,4 +1,4 @@
-# Ardvane - one-command, READ-ONLY scan of this Windows PC. BETA: not yet tested on real Windows.
+# Ardvane - one-command, READ-ONLY scan of this Windows PC. BETA: runs in CI on Windows and has early community testers.
 # Nothing is installed, changed, deleted or run from your projects. No internet connection is needed.
 #
 #   powershell -ExecutionPolicy Bypass -File .\scan-my-machine.ps1               scan your user folder
@@ -74,7 +74,7 @@ if ($script:danger -eq $n) { Okay 'none' }
 
 # 2. processes
 Head1 '2. Running processes'; $n = $script:danger; $nw = $script:warn
-foreach ($p in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -notmatch 'scan-my-machine' })) {
+foreach ($p in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -notmatch 'scan-my-machine' -and $_.CommandLine -notmatch '^"?(?:[^"]*[\\/])?(?:cmd|powershell|pwsh)(?:\.exe)?"?\s+(?:/[ck]|-c|-command)\s' })) {
     $t = "$($p.ProcessId) $($p.Name) $($p.CommandLine)"; if ($t.Length -gt 180) { $t = $t.Substring(0, 180) }
     if ($p.Name -match 'MicrosoftSystem64|SvcHostUpdate' -or $p.CommandLine -match 'MicrosoftCLROptimization|\\\.node_modules\\|node(\.exe)?"?\s+\S*\.(eot|woff2?|ttf|otf|llf)(\s|$)') { Bad "process: $t" }
     elseif ($p.CommandLine -match 'node(\.exe)?"?\s+-e\s' -and $p.CommandLine -match 'https?://|eval|base64|Buffer\.from|atob') { Chk "inline node process fetching/decoding code: $t" }

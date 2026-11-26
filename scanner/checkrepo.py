@@ -187,6 +187,23 @@ if FEED:
     MALICIOUS_PYPI |= set(FEED["pypi"])
 
 # ---------------------------------------------------------------- file classes
+# Ardvane's own records: to-do and fix history quote the findings (including malware strings), quarantine and history backups
+# hold the malware on purpose, reports describe it. They are evidence, not code, so scanning a parent folder never reports them.
+OWN_DATA_DIRS = {"quarantine", "history", "reports", "scans"}
+OWN_DATA_FILES = {"tasks.json", "fixes.json", "dashboard.json", "settings.json", "update.json", "github-audit.json", "github-seen.json",
+                  "osv-cache.json", "extensions-seen.txt", "fingerprints.txt", "malware-paths.txt", "indicators.signed"}
+
+
+def own_data(path):
+    """True for Ardvane's records inside ~/.checkrepo (its own program files there are still scanned)."""
+    base = os.path.realpath(os.path.expanduser("~/.checkrepo"))
+    p = os.path.realpath(path)
+    if p == base or not p.startswith(base + os.sep):
+        return False
+    first = p[len(base) + 1:].split(os.sep)[0]
+    return first in OWN_DATA_DIRS or (os.sep not in p[len(base) + 1:] and first in OWN_DATA_FILES)
+
+
 SKIP_DIRS = {".git", "node_modules", "bower_components", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache"}
 CODE_EXT = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx")
 FONT_EXT = (".woff", ".woff2", ".ttf", ".otf", ".eot", ".llf", ".fnt")
@@ -826,12 +843,14 @@ class Scan:
                 for d in dns:                       # os.walk lists linked folders but never enters them
                     if os.path.islink(os.path.join(dp, d)):
                         self.entry(os.path.join(dp, d), rel_of(d))
-                dns[:] = [d for d in dns if d not in skip and not os.path.islink(os.path.join(dp, d))]
+                dns[:] = [d for d in dns if d not in skip and not os.path.islink(os.path.join(dp, d)) and not own_data(os.path.join(dp, d))]
                 for fn in fns:
                     self.entry(os.path.join(dp, fn), rel_of(fn))
         self.guarded("(final checks)", self.finish)
 
     def entry(self, full, rel):
+        if own_data(full):
+            return
         if os.path.islink(full):
             self.guarded(rel, self.symlink, full, rel)
         elif os.path.isfile(full):

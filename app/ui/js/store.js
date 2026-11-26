@@ -20,6 +20,8 @@ export const S = {
   /** @type {any} */ tasks: null,
   /** @type {any} */ hjob: undefined,
   historyDraft: '',
+  /** @type {string|null|undefined} the GitHub CLI's login: undefined = not asked yet, null = asking, '' = none */
+  ghLogin: undefined,
   /** @type {{open: boolean, loading: boolean, repos: any[]|null, err: string, q: string, filter: string}} */
   ghPick: { open: false, loading: false, repos: null, err: '', q: '', filter: 'all' },
   /** @type {any} */ fixes: null,

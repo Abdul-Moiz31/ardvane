@@ -10,11 +10,12 @@ fake job interviews, malicious packages and the PolinRider worm.**
 Find it · block it · fix it · and stay on top of it every day. Everything runs on your own computer.
 
 [![Tests](https://github.com/Abdul-Moiz31/ardvane/actions/workflows/tests.yml/badge.svg)](https://github.com/Abdul-Moiz31/ardvane/actions/workflows/tests.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/Abdul-Moiz31/ardvane/releases)
+[![Version](https://img.shields.io/github/v/release/Abdul-Moiz31/ardvane?color=blue)](https://github.com/Abdul-Moiz31/ardvane/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(beta)-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 
+[Website](https://ardvane-site.vercel.app) ·
 [Get started](#get-started) ·
 [What it does](#what-it-does) ·
 [How it protects you](#how-it-protects-you) ·
@@ -37,11 +38,11 @@ I was hit **three times in five weeks**. A clean reinstall lasted three days. De
 revoking tokens didn't stop it, because it kept coming back through infected repositories and collaborators. Ardvane is
 everything that finally worked, packaged so you don't lose the weeks I did. → [Read the story](docs/story)
 
-> 🛑 **Think you're infected right now?** Go to [`docs/after-a-scan/if-danger-found.md`](docs/after-a-scan/if-danger-found.md). The order of the steps matters.
+> **Think you're infected right now?** Go to [`docs/after-a-scan/if-danger-found.md`](docs/after-a-scan/if-danger-found.md). The order of the steps matters.
 
 <a id="get-started"></a>
 
-## 🚀 Get started
+## Get started
 
 **1. Install** with one command:
 
@@ -81,8 +82,8 @@ The dashboard opens in your browser and runs **only on your computer**. Press **
 | `ardvane fixes` | What Ardvane can fix for you, with undo |
 | `ardvane --help` | Everything else |
 
-The scan ends with ✅ **CLEAN**, ⚠️ **worth a look** or 🛑 **INFECTED**, says exactly what to do next, and saves a report.
-Update with `brew upgrade ardvane` or `pipx upgrade ardvane`.
+The scan ends with **CLEAN**, **worth a look** or **INFECTED**, says exactly what to do next, and saves a report.
+When a new version is out the dashboard says so and updates in one click; or run `brew upgrade ardvane` / `pipx upgrade ardvane`.
 
 <details>
 <summary>Run from source instead (contributors, or no Homebrew / pipx)</summary>
@@ -100,24 +101,26 @@ and on Windows (beta) the matching `.ps1` files in `windows/`.
 
 <a id="what-it-does"></a>
 
-## ✨ What Ardvane does
+## What Ardvane does
 
 | | |
 |---|---|
-| 🔍 **Scans your computer** | Malware locations, running malware, startup items, attacker connections, editor settings, every git project and every installed package |
-| 🧱 **Blocks infected code** | `git clone` checks a repository *before* its files are written; `git pull` / `checkout` warn you; `git push` is blocked if a repository contains malware |
-| ⚙️ **Hardens your tools** | VS Code / Cursor can't auto-run code when you open a folder; npm packages can't run install scripts |
-| 🔧 **Fixes, with undo** | Fixes what's safe to fix (editor and npm settings, switched-off protection, malware in known locations), **ask first** by default or **automatic** if you choose. Malware is quarantined, never deleted |
-| ✅ **To-do list** | Every finding becomes a short checklist; a real infection opens the recovery checklist; a later scan checks that your fix worked |
-| 🤖 **GitHub Action** | The same scanner on every push and pull request, and every branch every night, for teammates and branches nobody opens locally: `uses: Abdul-Moiz31/ardvane@v0.3.0` ([how](docs/github-action.md)) |
-| 📦 **Safe install** | `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` check every package an install would add against known malware (Ardvane's list plus OSV.dev's malicious-package database) and stop if one is |
-| ☀️ **Daily check** | Runs at the time you choose, notices if malware switched your protection off, and shows a notification |
-| 🐙 **GitHub check** *(optional)* | Warns about many repos pushed at once and scans recently pushed repos, plus every branch of any repos you list (yours, your organization's, a teammate's). Your token stays in the GitHub CLI |
-| 📚 **Guides** | Every attack explained, and step-by-step recovery: cut off access, clean repositories, rotate secrets, harden |
+| **Scans your computer** | Malware locations, running malware, startup items, attacker connections, editor settings, every git project and every installed package |
+| **Checks git history** | Every version of every file on every branch, tag and commit, and says whether malware is in a branch's current files or only in older commits. A GitHub repository is read in a temporary folder and deleted again |
+| **Cleans history** | For repositories you administer: a full backup first, then every commit, branch and tag rewritten, verified, shown to you, and pushed only after you type the repository's name |
+| **Blocks infected code** | `git clone` checks a repository *before* its files are written; `git pull` / `checkout` warn you; `git push` is blocked if a repository contains malware |
+| **Hardens your tools** | VS Code / Cursor can't auto-run code when you open a folder; npm packages can't run install scripts |
+| **Fixes, with undo** | Fixes what's safe to fix (editor and npm settings, switched-off protection, malware in known locations), **ask first** by default or **automatic** if you choose. Malware is quarantined, never deleted |
+| **To-do list** | Every finding becomes a short checklist; a real infection opens the recovery checklist; a later scan checks that your fix worked |
+| **Safe install** | `npm`, `npx`, `pnpm`, `yarn`, `bun` and `pip` check every package an install would add against known malware (Ardvane's list plus OSV.dev's malicious-package database), and ask first about a package created this week, a release by a first-time publisher, or a name one typo from a popular package |
+| **GitHub check** | Audits your account (self-hosted runners, new deploy keys and SSH keys, suspicious webhooks, pending invitations, repositories a stolen token could force-push), warns about many repos pushed at once and scans recently pushed repos, plus every branch of any repos you choose. Shown live while a scan runs. The dashboard offers to turn it on when the GitHub CLI is signed in; your token stays in the GitHub CLI |
+| **Daily check** | Runs at the time you choose, notices if malware switched your protection off, and shows a notification. On macOS it runs through the Ardvane app so you can allow Documents, Desktop and Downloads once |
+| **GitHub Action** | The same scanner on every push and pull request, and every branch every night, for teammates and branches nobody opens locally: `uses: Abdul-Moiz31/ardvane@v0.11.3` ([how](docs/github-action.md)) |
+| **Guides** | Every attack explained, and step-by-step recovery: cut off access, clean repositories, rotate secrets, harden |
 
 <a id="how-it-protects-you"></a>
 
-## 🛡️ How it protects you
+## How it protects you
 
 | You do | Ardvane does |
 |---|---|
@@ -131,7 +134,7 @@ and on Windows (beta) the matching `.ps1` files in `windows/`.
 
 A scan takes about **0.1–0.7 seconds per repository**. When everything is clean you won't notice it.
 
-## 🔒 Safe by design
+## Safe by design
 
 - **Local only.** No account, no telemetry, no cloud. The dashboard listens on `127.0.0.1`, needs a per-session key,
   and refuses requests from other websites.
@@ -148,7 +151,7 @@ A scan takes about **0.1–0.7 seconds per repository**. When everything is clea
 
 <a id="accuracy"></a>
 
-## 📊 Accuracy
+## Accuracy
 
 The scanner was built from **real malware files** taken from an actual infection, then tuned against clean code:
 
@@ -158,13 +161,14 @@ The scanner was built from **real malware files** taken from an actual infection
 | Same files with every known marker switched off (behaviour rules only) | **71 / 71 detected** |
 | 18 popular open-source projects, 106,225 files (Font-Awesome, Babel, Webpack, Prettier, javascript-obfuscator…) | **0 false alarms** |
 | A developer's 14 real projects + all installed packages, ~240,000 files | **0 false alarms** · 1 real infection leftover found |
-| Automated tests: scanner, fixer (incl. attempts to trick it), dashboard security, GitHub check | **97 tests**, run on macOS, Linux and Windows on every change, plus a build-and-install test of the package |
+| Ardvane scanned by itself: its source, the pip-installed copy and its own records | **0 alarms**, checked on every change |
+| Automated tests: scanner, fixer (incl. attempts to trick it), history clean-up, dashboard security, GitHub check | **195 unit tests and 143 detection checks**, run on macOS, Linux and Windows on every change, plus a build-and-install test of the package |
 
 **Honest limits:** Ardvane targets this family of attacks, so a completely new technique may not be detected. That's
-why it also hardens your editor, npm, git and GitHub and checks every day. The Windows scripts are beta. A scan can't
+why it also hardens your editor, npm, git and GitHub and checks every day. Windows support is beta: the scripts pass their tests on Windows in CI, but they have had far less real-world use than macOS, so reports are very welcome. A scan can't
 prove a machine is clean after a backdoor has run; see the [recovery guide](docs/after-a-scan/if-danger-found.md).
 
-## 📁 What's in the repository
+## What's in the repository
 
 ```
 ardvane/
@@ -177,7 +181,7 @@ ardvane/
 └── docs/                       guides: the attacks, recovery, hardening, the story
 ```
 
-## 📚 Learn more
+## Learn more
 
 - [The attacks](docs/attacks): PolinRider worm, fake job interviews, BeaverTail / InvisibleFerret stealers, the
   MicrosoftSystem64 backdoor, VS Code auto-run tasks, GlassWorm extensions, malicious npm packages, AI coding-agent
@@ -186,7 +190,7 @@ ardvane/
   [Secrets rotation](docs/after-a-scan/secrets-rotation-checklist.md) · [Hardening checklist](docs/after-a-scan/hardening-checklist.md)
 - Reference: [Dashboard](docs/dashboard.md) · [checkrepo](docs/checkrepo.md) · [Daily check](docs/daily-routine.md) · [Infected packages](docs/infected-packages.md)
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are very welcome, especially **Windows test reports**, **new malicious packages or indicators** (with a
 link to the public report) and **false-alarm reports**. Read [CONTRIBUTING.md](CONTRIBUTING.md), fork, branch, and open a
@@ -194,7 +198,7 @@ pull request; every change needs a test.
 
 Found a security problem in Ardvane itself? Please report it privately; see [SECURITY.md](SECURITY.md).
 
-## 🙏 Credits
+## Credits
 
 Ardvane stands on the work of researchers and other victims who published their findings:
 [OpenSourceMalware](https://github.com/OpenSourceMalware/PolinRider) ·
@@ -204,7 +208,7 @@ Ardvane stands on the work of researchers and other victims who published their 
 Palo Alto Networks Unit 42 · Google Threat Intelligence Group · JFrog Security Research · Socket · Elastic Security Labs ·
 Checkmarx · Cloud Security Alliance. Full source lists are at the end of every page in [`docs/attacks`](docs/attacks).
 
-## ⚖️ License and disclaimer
+## License and disclaimer
 
 [MIT](LICENSE): use it, share it, adapt it.
 Ardvane reduces risk; it cannot guarantee that a machine is clean or will stay clean. It is provided as-is, without warranty.
